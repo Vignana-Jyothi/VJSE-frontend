@@ -1,6 +1,7 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
+<<<<<<< HEAD
 // Utility to normalize Gmail addresses by removing dots
 function normalizeEmail(email) {
   if (!email) return '';
@@ -14,6 +15,9 @@ function normalizeEmail(email) {
 }
 
 module.exports = function(prisma) {
+=======
+module.exports = function (prisma) {
+>>>>>>> a6864ac (feat: add sourcer tracking, city field and intro request status progression)
   passport.use(
     new GoogleStrategy(
       {
@@ -21,7 +25,7 @@ module.exports = function(prisma) {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy-client-secret',
         callbackURL: 'http://localhost:3000/auth/google/callback',
       },
-      async function(accessToken, refreshToken, profile, done) {
+      async function (accessToken, refreshToken, profile, done) {
         try {
           if (!profile.emails || profile.emails.length === 0) {
             return done(new Error('No email found in Google profile'), null);
@@ -56,12 +60,23 @@ module.exports = function(prisma) {
 
           // 3. Auto-resolve role if registering a new user based on email constraints
           let resolvedRole = 'Mentor'; // Default role for non-institution emails
+<<<<<<< HEAD
           
           if (
             normalized === 'karnamsuhaas@gmail.com' ||
             normalized === 'suhaaskarnam@gmail.com' ||
             normalized === 'shubham202098@gmail.com' ||
             normalized === 'akshaynerella9@gmail.com'
+=======
+
+          if (lowerEmail === 'admin@gmail.com' || lowerEmail === 'admin@vnrvjiet.in') {
+            resolvedRole = 'Admin';
+          } else if (
+            lowerEmail === 'founder@vnrvjiet.in' ||
+            lowerEmail === 'suhaas@vnrvjiet.in' ||
+            lowerEmail === 'akshay@vnrvjiet.in' ||
+            lowerEmail === 'shubham202098@gmail.com'
+>>>>>>> a6864ac (feat: add sourcer tracking, city field and intro request status progression)
           ) {
             resolvedRole = 'Admin';
           } else if (normalized === 'founder@vnrvjiet.in') {

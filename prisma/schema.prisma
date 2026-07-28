@@ -14,19 +14,22 @@ datasource db {
 }
 
 model Lead {
-  id                 Int                 @id @default(autoincrement())
-  name               String
-  email              String
-  domain             String
-  organization       String
-  skills             String              @default("")
-  verified           Boolean             @default(false)
-  status             String              @default("Pending") // "Pending" | "Approved" | "Rejected"
-  rejectionReason    String              @default("")
-  invited            Boolean             @default(false)
-  createdAt          DateTime            @default(now())
-  connectionRequests ConnectionRequest[]
-  chatMessages       ChatMessage[]
+  id              Int                @id @default(autoincrement())
+  name            String
+  email           String
+  domain          String
+  organization    String
+  city            String             @default("")
+  skills          String             @default("")
+  verified        Boolean            @default(false)
+  status          String             @default("Pending") // "Pending" | "Approved" | "Rejected"
+  rejectionReason String             @default("")
+  invited         Boolean            @default(false)
+  sourcerId       Int?
+  sourcer         User?              @relation("SourcerLeads", fields: [sourcerId], references: [id])
+  createdAt       DateTime           @default(now())
+  connections     ConnectionRequest[]
+  chatMessages    ChatMessage[]
 }
 
 model User {
@@ -40,6 +43,7 @@ model User {
   startupProfile     StartupProfile?
   connectionRequests ConnectionRequest[]
   chatMessages       ChatMessage[]
+  submittedLeads     Lead[]             @relation("SourcerLeads")
 }
 
 model StartupProfile {
@@ -59,7 +63,7 @@ model ConnectionRequest {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   leadId    Int      // Receiver (Lead)
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  status    String   // "Pending" | "Accepted" | "Rejected"
+  status    String   // "Pending" | "Intro Made" | "Connected"
   createdAt DateTime @default(now())
 
   @@unique([userId, leadId])

@@ -1,12 +1,4 @@
-const users = [
-  { id: 1, name: "Rohan Kumar", email: "student@vnrvjiet.in", password: "student123", role: "Student", googleId: null },
-  { id: 2, name: "Anjali Dev", email: "volunteer@vnrvjiet.in", password: "volunteer123", role: "Volunteer", googleId: null },
-  { id: 3, name: "Kabir Mehta", email: "founder@vnrvjiet.in", password: "founder123", role: "Founder", googleId: null },
-  { id: 4, name: "Suhaas Karnam", email: "suhaas@vnrvjiet.in", password: "founder123", role: "Founder", googleId: null },
-  { id: 5, name: "Akshay Nerella", email: "akshay@vnrvjiet.in", password: "founder123", role: "Founder", googleId: null },
-  { id: 6, name: "Suresh Menon", email: "lead@gmail.com", password: "lead123", role: "Mentor", googleId: null },
-  { id: 7, name: "VJ Admin", email: "admin@gmail.com", password: "admin123", role: "Admin", googleId: null }
-];
+const users = [];
 
 const leads = [
   { id: 1, name: "Rakesh Menon", email: "rakesh@globallogic.com", domain: "EdTech", organization: "GlobalLogic", skills: "Advisory, Early Feedback", verified: true, status: "Approved", invited: false, rejectionReason: "" },
