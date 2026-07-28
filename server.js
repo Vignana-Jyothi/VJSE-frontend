@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const { StreamChat } = require('stream-chat');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 const path = require('path');
