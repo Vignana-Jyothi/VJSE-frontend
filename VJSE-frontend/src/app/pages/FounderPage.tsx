@@ -92,6 +92,7 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [confirmingLeadId, setConfirmingLeadId] = useState<number | null>(null);
 
   // Auto-refresh chat timer
   useEffect(() => {
