@@ -22,16 +22,12 @@ class EncryptedDatabase extends Database {
 const betterSqlite3Path = require.resolve('better-sqlite3');
 require.cache[betterSqlite3Path].exports = EncryptedDatabase;
 
-// 2. Import Prisma
-const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
-const { PrismaClient } = require('./generated/prisma');
+// 2. Import Mock Prisma
+const prisma = require('./mock-prisma');
 
-// 3. Initialize Express and Prisma
+// 3. Initialize Express
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-const adapter = new PrismaBetterSqlite3({ url: 'file:./dev.db' });
-const prisma = new PrismaClient({ adapter });
 
 // Load Passport Configuration
 require('./passport')(prisma);
@@ -490,6 +486,7 @@ app.get('/api/approved-leads', async (req, res) => {
 
     let leads = await prisma.lead.findMany({
       where,
+      include: { sourcer: true },
       orderBy: { createdAt: 'desc' }
     });
 
@@ -519,7 +516,11 @@ app.get('/api/connections', async (req, res) => {
     const connections = await prisma.connectionRequest.findMany({
       where,
       include: { 
-        lead: true,
+        lead: {
+          include: {
+            sourcer: true
+          }
+        },
         user: true // Include Founder details for Admin view
       }
     });
