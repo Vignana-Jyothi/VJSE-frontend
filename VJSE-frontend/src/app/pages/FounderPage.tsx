@@ -643,7 +643,7 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
                       {!conn ? (
                         <Button
                           size="sm"
-                          onClick={() => handleSendRequest(lead.id)}
+                          onClick={() => setConfirmingLeadId(lead.id)}
                           className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg text-xs"
                         >
                           <UserPlus className="mr-1 h-3.5 w-3.5" />
@@ -755,6 +755,42 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
             currentUser={{ id: "founder-123", name: "Rahul Verma" }}
             targetUser={{ id: "sourcer-456", name: "Ananya Sharma" }}
           />
+        </div>
+      )}
+      {/* Confirmation Dialog */}
+      {confirmingLeadId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-md rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-2xl space-y-5">
+            <CardHeader className="p-0 pb-1">
+              <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-yellow-500" />
+                Confirm Connection Request
+              </CardTitle>
+              <CardDescription className="text-sm text-[#9CA3AF]">
+                Your request will be sent to the student who referred this contact. They will personally make the introduction.
+              </CardDescription>
+            </CardHeader>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmingLeadId(null)}
+                className="border-[#1F2937] bg-[#111111] hover:bg-[#1C1C1C] text-white rounded-lg text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  handleSendRequest(confirmingLeadId);
+                  setConfirmingLeadId(null);
+                }}
+                className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg text-xs font-semibold"
+              >
+                Confirm
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>
