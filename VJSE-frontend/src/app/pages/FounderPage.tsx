@@ -44,6 +44,9 @@ interface Lead {
   organization: string;
   skills: string;
   verified: boolean;
+  sourcer?: {
+    name: string;
+  } | null;
 }
 
 interface ConnectionRequest {
@@ -637,17 +640,19 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
                     </div>
 
                     <div className="border-t border-[#1F2937] pt-4 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-[#9CA3AF]">Contact: {lead.email}</span>
+                      <span className="text-[11px] text-[#9CA3AF]">
+                        Referred by: <span className="text-white font-medium">{lead.sourcer?.name || "VJ Student"}</span>
+                      </span>
                       
                       {/* Connection request actions */}
                       {!conn ? (
                         <Button
                           size="sm"
                           onClick={() => setConfirmingLeadId(lead.id)}
-                          className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg text-xs"
+                          className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg text-xs font-semibold"
                         >
                           <UserPlus className="mr-1 h-3.5 w-3.5" />
-                          Connect
+                          Request Introduction
                         </Button>
                       ) : conn.status === "Pending" ? (
                         <div className="flex items-center gap-1.5">
@@ -655,13 +660,6 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
                             <Clock className="h-3 w-3" />
                             Pending
                           </span>
-                          <button
-                            onClick={() => handleMockAcceptRequest(conn.id)}
-                            title="Mock lead accepting this connection request"
-                            className="bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] px-2 py-1 font-semibold transition"
-                          >
-                            Mock Accept
-                          </button>
                         </div>
                       ) : conn.status === "Accepted" ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs text-green-400">
