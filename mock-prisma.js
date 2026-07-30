@@ -1,4 +1,23 @@
+const bcrypt = require('bcrypt');
+
 const users = [];
+
+const demoUsers = [
+  { id: 1, name: "Rohan Kumar", email: "student@vnrvjiet.in", password: "student123", role: "Student" },
+  { id: 2, name: "Anjali Dev", email: "volunteer@vnrvjiet.in", password: "volunteer123", role: "Volunteer" },
+  { id: 3, name: "Kabir Mehta", email: "founder@vnrvjiet.in", password: "founder123", role: "Founder" },
+  { id: 4, name: "Suresh Menon", email: "lead@gmail.com", password: "lead123", role: "Mentor" },
+  { id: 5, name: "Karnam Suhaas", email: "karnamsuhaas@gmail.com", password: "VJSEeco@2026", role: "Admin" },
+  { id: 6, name: "Shubham", email: "shubham202098@gmail.com", password: "VJSEeco@2026", role: "Admin" },
+  { id: 7, name: "Akshay Nerella", email: "akshaynerella9@gmail.com", password: "VJSEeco@2026", role: "Admin" }
+];
+
+// Hash passwords dynamically on module load
+for (const u of demoUsers) {
+  const cloned = { ...u };
+  cloned.password = bcrypt.hashSync(cloned.password, 10);
+  users.push(cloned);
+}
 
 const leads = [
   { id: 1, name: "Rakesh Menon", email: "rakesh@globallogic.com", domain: "EdTech", organization: "GlobalLogic", skills: "Advisory, Early Feedback", verified: true, status: "Approved", invited: false, rejectionReason: "" },
@@ -65,7 +84,10 @@ const prismaMock = {
         if (where.domain) result = result.filter(l => l.domain === where.domain);
         if (where.verified !== undefined) result = result.filter(l => l.verified === where.verified);
       }
-      return result;
+      return result.map(l => {
+        const sourcer = users.find(u => u.id === (l.sourcerId || 1)) || users[0];
+        return { ...l, sourcer };
+      });
     },
     findUnique: async ({ where }) => {
       return leads.find(l => l.id === where.id) || null;
@@ -130,7 +152,9 @@ const prismaMock = {
         result = result.filter(c => c.userId === where.userId);
       }
       return result.map(c => {
-        const lead = leads.find(l => l.id === c.leadId);
+        const rawLead = leads.find(l => l.id === c.leadId);
+        const sourcer = users.find(u => u.id === (rawLead?.sourcerId || 1)) || users[0];
+        const lead = rawLead ? { ...rawLead, sourcer } : null;
         const user = users.find(u => u.id === c.userId);
         return { ...c, lead, user };
       });

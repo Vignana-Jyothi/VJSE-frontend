@@ -1,7 +1,6 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
-// Utility to normalize Gmail addresses by removing dots
 function normalizeEmail(email) {
   if (!email) return '';
   const lower = email.toLowerCase().trim();
@@ -30,7 +29,6 @@ module.exports = function (prisma) {
           const email = profile.emails[0].value;
           const normalized = normalizeEmail(email);
 
-          // 1. Check if user already has their googleId linked
           let user = await prisma.user.findUnique({
             where: { googleId: profile.id },
           });
@@ -39,13 +37,11 @@ module.exports = function (prisma) {
             return done(null, user);
           }
 
-          // 2. Otherwise, check if user exists by email but isn't linked to Google yet
           user = await prisma.user.findUnique({
             where: { email: normalized },
           });
 
           if (user) {
-            // Link the googleId to the existing account
             user = await prisma.user.update({
               where: { id: user.id },
               data: { googleId: profile.id },
@@ -54,14 +50,13 @@ module.exports = function (prisma) {
             return done(null, user);
           }
 
-          // 3. Auto-resolve role if registering a new user based on email constraints
-          let resolvedRole = 'Mentor'; // Default role for non-institution emails
+          let resolvedRole = 'Student';
+
           if (
             normalized === 'karnamsuhaas@gmail.com' ||
             normalized === 'suhaaskarnam@gmail.com' ||
             normalized === 'shubham202098@gmail.com' ||
             normalized === 'akshaynerella9@gmail.com' ||
-            normalized === 'admin@gmail.com' ||
             normalized === 'admin@vnrvjiet.in'
           ) {
             resolvedRole = 'Admin';
@@ -76,14 +71,12 @@ module.exports = function (prisma) {
             }
           }
 
-          // 4. Create the new user record in SQLCipher SQLite DB
           user = await prisma.user.create({
             data: {
               email: normalized,
               name: profile.displayName || 'VJ User',
               role: resolvedRole,
               googleId: profile.id,
-              // Password is left null/empty since authentication is handled by Google
             },
           });
 
@@ -97,12 +90,10 @@ module.exports = function (prisma) {
     )
   );
 
-  // Serialize user into the session store
   passport.serializeUser((user, done) => {
     done(null, user.id);
   });
 
-  // Deserialize user out of the session store
   passport.deserializeUser(async (id, done) => {
     try {
       const user = await prisma.user.findUnique({
