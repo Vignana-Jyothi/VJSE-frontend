@@ -96,6 +96,7 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
   const [chatInput, setChatInput] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [confirmingLeadId, setConfirmingLeadId] = useState<number | null>(null);
+  const [requestedLeadIds, setRequestedLeadIds] = useState<number[]>([]);
 
   // Auto-refresh chat timer
   useEffect(() => {
@@ -232,6 +233,7 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
       if (res.ok) {
         // Refresh connection requests
         await fetchConnections(user.id);
+        setRequestedLeadIds((prev) => [...prev, leadId]);
       }
     } catch (err) {
       console.error("Error sending connection request:", err);
@@ -645,7 +647,7 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
                       </span>
                       
                       {/* Connection request actions */}
-                      {!conn ? (
+                      {!conn && !requestedLeadIds.includes(lead.id) ? (
                         <Button
                           size="sm"
                           onClick={() => setConfirmingLeadId(lead.id)}
@@ -654,13 +656,15 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
                           <UserPlus className="mr-1 h-3.5 w-3.5" />
                           Request Introduction
                         </Button>
-                      ) : conn.status === "Pending" ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2.5 py-1 text-xs text-yellow-400">
-                            <Clock className="h-3 w-3" />
-                            Pending
-                          </span>
-                        </div>
+                      ) : (conn?.status === "Pending" || requestedLeadIds.includes(lead.id)) ? (
+                        <Button
+                          size="sm"
+                          disabled
+                          className="bg-[#1F2937] text-[#9CA3AF] cursor-not-allowed rounded-lg text-xs font-semibold"
+                        >
+                          <Clock className="mr-1 h-3.5 w-3.5" />
+                          Requested
+                        </Button>
                       ) : conn.status === "Accepted" ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs text-green-400">
                           <UserCheck className="h-3 w-3" />
