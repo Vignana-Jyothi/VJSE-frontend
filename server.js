@@ -311,15 +311,15 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    req.session.user = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    };
+
     console.log(`User logged in: ${user.name} (${user.role})`);
-    res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
-    });
+    res.json({ user: req.session.user });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ error: "An unexpected error occurred during login" });
