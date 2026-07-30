@@ -9,21 +9,41 @@ const passport = require('passport');
 
 const Database = require('better-sqlite3');
 
-// 1. Intercept the 'better-sqlite3' connection to auto-inject the decryption key
+// 1. Intercept the 'better-sqlite3' connection to auto-inject the decryption key and set up pragmas
 class EncryptedDatabase extends Database {
   constructor(filename, options) {
     super(filename, options);
-    const key = process.env.SQLCIPHER_KEY || 'my-super-secret-password';
+    const key = process.env.DB_ENCRYPTION_KEY || 'my-super-secret-password';
     console.log(`🔐 [Express SQLCipher] Authenticating database: ${filename}`);
+    this.pragma("cipher='sqlcipher'");
     this.pragma(`key='${key}'`);
+    // Enable WAL mode and busy_timeout for concurrency
+    this.pragma('journal_mode=WAL');
+    this.pragma('busy_timeout=5000');
   }
 }
 
 const betterSqlite3Path = require.resolve('better-sqlite3');
 require.cache[betterSqlite3Path].exports = EncryptedDatabase;
 
+const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
+const { PrismaClient } = require('./generated/prisma');
+
+const adapter = new PrismaBetterSqlite3({ url: 'file:./dev.db' });
+const realPrisma = new PrismaClient({ adapter });
+
 // 2. Import Mock Prisma
-const prisma = require('./mock-prisma');
+const mockPrisma = require('./mock-prisma');
+
+// Use Real DB if USE_REAL_DB=true
+const useRealDb = process.env.USE_REAL_DB === 'true';
+const prisma = useRealDb ? realPrisma : mockPrisma;
+
+if (useRealDb) {
+  console.log(`🔐 [Express] Using REAL database with SQLCipher encryption.`);
+} else {
+  console.log(`⚠️ [Express] Using in-memory mock database.`);
+}
 
 // 3. Initialize Express
 const app = express();
