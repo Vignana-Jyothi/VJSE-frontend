@@ -63,8 +63,16 @@ const prismaMock = {
       if (where.id) return users.find(u => u.id === where.id) || null;
       return null;
     },
+    findMany: async ({ where, orderBy } = {}) => {
+      let result = [...users];
+      if (where) {
+        if (where.role) result = result.filter(u => u.role === where.role);
+        if (where.isBlocked !== undefined) result = result.filter(u => Boolean(u.isBlocked) === where.isBlocked);
+      }
+      return result;
+    },
     create: async ({ data }) => {
-      const newUser = { id: nextUserId++, googleId: null, ...data };
+      const newUser = { id: nextUserId++, googleId: null, isBlocked: false, ...data };
       users.push(newUser);
       return newUser;
     },
@@ -73,6 +81,13 @@ const prismaMock = {
       if (uIndex !== -1) {
         users[uIndex] = { ...users[uIndex], ...data };
         return users[uIndex];
+      }
+      throw new Error("User not found");
+    },
+    delete: async ({ where }) => {
+      const uIndex = users.findIndex(u => u.id === where.id);
+      if (uIndex !== -1) {
+        return users.splice(uIndex, 1)[0];
       }
       throw new Error("User not found");
     }

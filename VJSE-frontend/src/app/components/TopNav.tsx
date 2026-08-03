@@ -23,14 +23,20 @@ export function TopNav({ user, onLogout }: TopNavProps) {
     <header className="border-b border-[#1F2937] bg-[#0A0A0A]/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <Link to="/network" className="flex items-center gap-3 text-sm font-semibold text-white">
-          <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#111111] text-[#3B82F6]">🚀</span>
+          <div className="flex items-center justify-center h-10 w-10 rounded-2xl bg-[#111111] border border-[#1F2937] p-1.5">
+            <img src="/favicon.svg" alt="VJ Network Logo" className="h-full w-full object-contain" />
+          </div>
           <div className="flex flex-col leading-tight">
-            <span className="text-base font-semibold">VJ Startups</span>
+            <span className="text-lg font-bold tracking-tight text-white">VJ Network</span>
+            <span className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">VJ Network Ecosystem</span>
           </div>
         </Link>
 
-        <div className="hidden md:block text-lg font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300">
-          VJ Startups Support Ecosystem
+        <div className="hidden md:flex items-center gap-2.5 text-lg font-bold tracking-wide text-white">
+          <img src="/favicon.svg" alt="VJ Network Logo" className="h-6 w-6 object-contain" />
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-400">
+            VJ Network
+          </span>
         </div>
 
         <div className="flex items-center gap-3">

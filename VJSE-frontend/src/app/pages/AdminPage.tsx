@@ -16,9 +16,14 @@ interface AdminPageProps {
 export function AdminPage({ user, onLogin }: AdminPageProps) {
   const [leads, setLeads] = useState<any[]>([]);
   const [introRequests, setIntroRequests] = useState<any[]>([]);
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [userSearch, setUserSearch] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [filterDomain, setFilterDomain] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [filterRole, setFilterRole] = useState("All");
+  const [filterBlacklist, setFilterBlacklist] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -43,7 +48,6 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
       if (!connRes.ok) throw new Error("Failed to fetch connection requests");
       const connData = await connRes.json();
       
-      // Map connection requests to match the rendering logic
       const mappedRequests = connData.map((c: any) => ({
         id: c.id,
         founder: c.user?.name || `Founder (ID: ${c.userId})`,
@@ -56,6 +60,13 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
         handled: c.status !== "Pending"
       }));
       setIntroRequests(mappedRequests);
+
+      // 3. Fetch all platform users
+      const usersRes = await fetch("/api/users");
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        setUsersList(usersData);
+      }
     } catch (err) {
       console.error(err);
       setError("Failed to retrieve admin data from backend.");
@@ -63,6 +74,88 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
       setLoading(false);
     }
   }
+
+  async function handleRoleChange(userObj: any, newRole: string) {
+    if (userObj.role === newRole) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to change the role of ${userObj.name} (${userObj.email}) from "${userObj.role}" to "${newRole}"?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/users/${userObj.id}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      if (res.ok) {
+        await fetchAdminData();
+      } else {
+        setError("Failed to update user role.");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Error changing user role.");
+    }
+  }
+
+  async function handleBlacklistToggle(userId: number, currentBlocked: boolean) {
+    try {
+      const res = await fetch(`/api/users/${userId}/blacklist`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isBlocked: !currentBlocked }),
+      });
+      if (res.ok) {
+        await fetchAdminData();
+      } else {
+        setError("Failed to update user blacklist status.");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Error toggling blacklist status.");
+    }
+  }
+
+  async function confirmKickUser() {
+    if (!selectedUserId) return;
+    try {
+      const res = await fetch(`/api/users/${selectedUserId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchAdminData();
+      } else {
+        setError("Failed to kick user.");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Error kicking user.");
+    } finally {
+      setSelectedUserId(null);
+    }
+  }
+
+  const filteredUsers = useMemo(() => {
+    return usersList.filter((u) => {
+      const matchesSearch = !userSearch.trim() || 
+        u.name.toLowerCase().includes(userSearch.toLowerCase()) || 
+        u.email.toLowerCase().includes(userSearch.toLowerCase());
+
+      const matchesRole = filterRole === "All" || u.role === filterRole;
+
+      const matchesBlacklist = 
+        filterBlacklist === "All"
+          ? true
+          : filterBlacklist === "Blacklisted"
+            ? Boolean(u.isBlocked)
+            : !u.isBlocked;
+
+      return matchesSearch && matchesRole && matchesBlacklist;
+    });
+  }, [usersList, userSearch, filterRole, filterBlacklist]);
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -223,37 +316,37 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
             <TabsList className="w-full sm:w-auto">
               <TabsTrigger value="all">All Leads</TabsTrigger>
               <TabsTrigger value="requests">Introduction Requests</TabsTrigger>
-              <TabsTrigger value="access" disabled>
-                Manage Access
-              </TabsTrigger>
+              <TabsTrigger value="access">Manage Access</TabsTrigger>
             </TabsList>
-            <div className="flex flex-wrap gap-3">
-              <select
-                value={filterDomain}
-                onChange={(event) => setFilterDomain(event.target.value)}
-                className="rounded-xl border border-[#27272A] bg-[#111111] px-4 py-3 text-sm text-white outline-none focus:border-[#3B82F6]"
-              >
-                <option value="">Filter domain</option>
-                {domainOptions.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-              <select
-                value={filterStatus}
-                onChange={(event) => setFilterStatus(event.target.value)}
-                className="rounded-xl border border-[#27272A] bg-[#111111] px-4 py-3 text-sm text-white outline-none focus:border-[#3B82F6]"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Verified">Verified</option>
-                <option value="Unverified">Unverified</option>
-              </select>
+          </div>
+
+          <TabsContent value="all" className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-3">
+                <select
+                  value={filterDomain}
+                  onChange={(event) => setFilterDomain(event.target.value)}
+                  className="rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
+                >
+                  <option value="">Filter domain</option>
+                  {domainOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <select
+                  value={filterStatus}
+                  onChange={(event) => setFilterStatus(event.target.value)}
+                  className="rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Verified">Verified</option>
+                  <option value="Unverified">Unverified</option>
+                </select>
+              </div>
               <Button variant="outline" onClick={downloadCsv} className="border-[#3B82F6] text-[#3B82F6] hover:bg-[#1D4ED8]/10">
                 ⬇ Download CSV
               </Button>
             </div>
-          </div>
-
-          <TabsContent value="all">
             <Table>
               <TableHeader>
                 <TableRow className="text-[#9CA3AF]">
@@ -350,7 +443,7 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
             <div className="grid gap-4 xl:grid-cols-3">
               {activeRequests.map((request) => (
                 <Card key={request.id} className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
-                  <div className="space-y-4 text-white">
+                  <div className="space-y-4 text-[#ffffff]">
                     <div className="space-y-1">
                       <p className="text-sm uppercase tracking-[0.24em] text-[#9CA3AF]">Requesting founder</p>
                       <p className="text-lg font-semibold">{request.founder}</p>
@@ -376,11 +469,143 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="access">
-            <div className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-10 text-center text-[#9CA3AF]">
-              <p className="font-semibold text-white">Manage Access coming soon</p>
-              <p className="mt-2">This feature is planned for Phase 2.</p>
+          <TabsContent value="access" className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <input
+                type="text"
+                placeholder="Search user by name or email..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="w-full max-w-sm rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={filterRole}
+                  onChange={(e) => setFilterRole(e.target.value)}
+                  className="rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
+                >
+                  <option value="All">All Roles</option>
+                  <option value="Student">Student</option>
+                  <option value="Mentor">Mentor</option>
+                  <option value="Founder">Founder</option>
+                  <option value="Volunteer">Volunteer</option>
+                  <option value="Admin">Admin</option>
+                </select>
+
+                <select
+                  value={filterBlacklist}
+                  onChange={(e) => setFilterBlacklist(e.target.value)}
+                  className="rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Blacklisted">Blacklisted</option>
+                </select>
+
+                <span className="text-xs text-[#9CA3AF]">
+                  Total: <span className="font-bold text-white">{filteredUsers.length}</span>
+                </span>
+              </div>
             </div>
+
+            <Table>
+              <TableHeader>
+                <TableRow className="text-[#9CA3AF]">
+                  <TableHead>User Name</TableHead>
+                  <TableHead>Email Address</TableHead>
+                  <TableHead>Current Role</TableHead>
+                  <TableHead>Blacklist Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-6 text-[#9CA3AF]">
+                      No user accounts found matching "{userSearch}".
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredUsers.map((u) => (
+                    <TableRow key={u.id} className="border-b border-[#1F2937]/50">
+                      <TableCell className="text-white font-semibold">{u.name}</TableCell>
+                      <TableCell className="text-[#D1D5DB]">{u.email}</TableCell>
+                      <TableCell>
+                        <select
+                          value={u.role}
+                          onChange={(e) => handleRoleChange(u, e.target.value)}
+                          className="rounded-lg border border-[#27272A] bg-[#0A0A0A] px-3 py-1.5 text-xs text-white outline-none focus:border-[#3B82F6]"
+                        >
+                          <option value="Student">Student</option>
+                          <option value="Mentor">Mentor</option>
+                          <option value="Founder">Founder</option>
+                          <option value="Volunteer">Volunteer</option>
+                          <option value="Admin">Admin</option>
+                        </select>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          u.isBlocked 
+                            ? "bg-red-500/15 text-red-400 border border-red-500/20" 
+                            : "bg-green-500/15 text-green-400 border border-green-500/20"
+                        }`}>
+                          {u.isBlocked ? "Blacklisted" : "Active"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleBlacklistToggle(u.id, u.isBlocked)}
+                            className={`text-xs font-semibold rounded-lg ${
+                              u.isBlocked
+                                ? "border-green-600 text-green-400 hover:bg-green-950/30"
+                                : "border-yellow-600 text-yellow-400 hover:bg-yellow-950/30"
+                            }`}
+                          >
+                            {u.isBlocked ? "Un-Blacklist" : "Blacklist"}
+                          </Button>
+
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs"
+                                onClick={() => setSelectedUserId(u.id)}
+                              >
+                                Kick / Remove
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="rounded-[32px] bg-[#111111] border border-[#1F2937] p-6 text-white">
+                              <DialogHeader>
+                                <DialogTitle>Kick user account?</DialogTitle>
+                                <DialogDescription className="text-[#9CA3AF]">
+                                  Are you sure you want to remove <span className="text-white font-semibold">{u.name} ({u.email})</span> from the platform?
+                                </DialogDescription>
+                              </DialogHeader>
+                              <DialogFooter className="gap-2 mt-4">
+                                <DialogClose asChild>
+                                  <Button variant="outline" className="border-[#3B82F6] text-[#3B82F6]">
+                                    Cancel
+                                  </Button>
+                                </DialogClose>
+                                <DialogClose asChild>
+                                  <Button variant="destructive" onClick={confirmKickUser}>
+                                    Kick Account
+                                  </Button>
+                                </DialogClose>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </TabsContent>
         </Tabs>
       </Card>

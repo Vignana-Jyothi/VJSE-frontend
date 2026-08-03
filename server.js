@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const { StreamChat } = require('stream-chat');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 const path = require('path');
@@ -229,6 +228,7 @@ app.post('/auth/google', async (req, res) => {
     req.session.user = {
       id: user.id,
       name: user.name,
+      fullName: user.name,
       email: user.email,
       role: user.role
     };
@@ -303,7 +303,7 @@ app.post('/api/logout', (req, res, next) => {
   });
 });
 
-// POST /api/login - Log in a user and verify credentials
+// POST /api/login - Log in user or auto-signup new @vnrvjiet.in accounts
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -315,22 +315,75 @@ app.post('/api/login', async (req, res) => {
     const normalized = normalizeEmail(email);
 
     // Check if user exists in DB
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email: normalized }
     });
 
-    if (!user) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
+    if (user) {
+      // User exists - check if blacklisted
+      if (user.isBlocked) {
+        return res.status(403).json({ error: "Your account has been blacklisted. Please contact an Admin." });
+      }
 
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      // Check password
+      if (user.password) {
+        let passwordMatch = false;
+        try {
+          passwordMatch = await bcrypt.compare(password, user.password);
+        } catch (e) {
+          passwordMatch = false;
+        }
+        if (!passwordMatch && password === user.password) {
+          passwordMatch = true;
+        }
+        if (!passwordMatch) {
+          return res.status(401).json({ error: "Invalid email or password" });
+        }
+      }
+    } else {
+      // User does NOT exist in DB - check if @vnrvjiet.in or eligible domain for auto-signup
+      if (normalized.endsWith("@vnrvjiet.in") || normalized.endsWith("@gmail.com")) {
+        let resolvedRole = 'Mentor';
+        if (
+          normalized === 'karnamsuhaas@gmail.com' ||
+          normalized === 'suhaaskarnam@gmail.com' ||
+          normalized === 'shubham202098@gmail.com' ||
+          normalized === 'akshaynerella9@gmail.com'
+        ) {
+          resolvedRole = 'Admin';
+        } else if (normalized === 'founder@vnrvjiet.in') {
+          resolvedRole = 'Founder';
+        } else if (normalized.endsWith('@vnrvjiet.in')) {
+          const prefix = normalized.split('@')[0];
+          if (prefix.startsWith('volunteer')) {
+            resolvedRole = 'Volunteer';
+          } else {
+            resolvedRole = 'Student';
+          }
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const namePrefix = normalized.split('@')[0];
+        const formattedName = namePrefix.charAt(0).toUpperCase() + namePrefix.slice(1);
+
+        user = await prisma.user.create({
+          data: {
+            email: normalized,
+            password: hashedPassword,
+            name: formattedName,
+            role: resolvedRole,
+          }
+        });
+        console.log(`🆕 Auto-registered new account on first login: ${user.name} (${user.email}) as ${user.role}`);
+      } else {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
     }
 
     req.session.user = {
       id: user.id,
       name: user.name,
+      fullName: user.name,
       email: user.email,
       role: user.role
     };
@@ -371,19 +424,24 @@ app.get('/api/leads', async (req, res) => {
 // POST /api/leads - Create a new lead
 app.post('/api/leads', async (req, res) => {
   try {
-    const { name, email, domain, organization } = req.body;
+    const { name, email, domain, organization, sourcerId } = req.body;
 
     if (!name || !email || !domain || !organization) {
       return res.status(400).json({ error: "Missing required fields (name, email, domain, organization)" });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const sId = sourcerId ? parseInt(sourcerId) : (req.session?.user?.id ? parseInt(req.session.user.id) : null);
+
     const lead = await prisma.lead.create({
       data: {
         name,
-        email,
+        email: normalizedEmail,
         domain,
         organization,
-        verified: false
+        verified: false,
+        sourcerId: sId
       }
     });
 
@@ -630,6 +688,96 @@ app.post('/api/connections', async (req, res) => {
   } catch (error) {
     console.error("Error sending connection request:", error);
     res.status(500).json({ error: "Failed to send connection request" });
+  }
+});
+
+// GET /api/users - Fetch all users for Admin Manage Access
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isBlocked: true,
+        rejectionCount: true,
+        createdAt: true,
+      },
+      orderBy: { id: 'asc' }
+    });
+    res.json(users);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// PATCH /api/users/:id/role - Update user role
+app.patch('/api/users/:id/role', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { role } = req.body;
+    const allowedRoles = ["Student", "Mentor", "Founder", "Volunteer", "Admin"];
+
+    if (isNaN(id) || !role || !allowedRoles.includes(role)) {
+      return res.status(400).json({ error: "Invalid user ID or role parameter." });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { role }
+    });
+
+    console.log(`Updated user ${updatedUser.name} role to ${role}`);
+    res.json(updatedUser);
+  } catch (error) {
+    console.error("Error updating user role:", error);
+    res.status(500).json({ error: "Failed to update user role" });
+  }
+});
+
+// PATCH /api/users/:id/blacklist - Blacklist or un-blacklist user
+app.patch('/api/users/:id/blacklist', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { isBlocked } = req.body;
+
+    if (isNaN(id) || isBlocked === undefined) {
+      return res.status(400).json({ error: "Invalid parameters." });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { isBlocked: Boolean(isBlocked) }
+    });
+
+    console.log(`Updated user ${updatedUser.name} blacklist status to ${isBlocked}`);
+    res.json(updatedUser);
+  } catch (error) {
+    console.error("Error updating user blacklist status:", error);
+    res.status(500).json({ error: "Failed to update user blacklist status" });
+  }
+});
+
+// DELETE /api/users/:id - Kick / delete user account
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    await prisma.user.delete({
+      where: { id }
+    });
+
+    console.log(`Deleted / Kicked user ID ${id}`);
+    res.json({ message: `User ${id} removed successfully` });
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    res.status(500).json({ error: "Failed to remove user account" });
   }
 });
 

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { UserRole } from "../data/network";
-import { Shield, Mail, Lock } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { api } from "../data/api";
 
 declare global {
@@ -27,7 +27,16 @@ interface LoginPageProps {
   onLogin: (user: { id: number; name: string; email: string; role: UserRole }, token?: string) => void;
 }
 
-function getRedirectPath(role: UserRole) {
+function getRedirectPath(role: UserRole, email?: string) {
+  const normalizedEmail = (email || "").toLowerCase();
+
+  // Special rule for @vnrvjiet.in logins
+  if (normalizedEmail.endsWith("@vnrvjiet.in")) {
+    if (role === "Admin") return "/admin";
+    if (normalizedEmail.startsWith("volunteer") || role === "Volunteer") return "/volunteer";
+    return "/student";
+  }
+
   switch (role) {
     case "Student":
       return "/student";
@@ -40,7 +49,7 @@ function getRedirectPath(role: UserRole) {
     case "Admin":
       return "/admin";
     default:
-      return "/network";
+      return "/student";
   }
 }
 
@@ -91,15 +100,18 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               client_id: clientId,
               callback: handleGoogleCredentialResponse,
             });
-            window.google.accounts.id.renderButton(
-              document.getElementById("google-signin-button"),
-              {
-                theme: "outline",
-                size: "large",
-                width: "100%",
-                text: "signin_with",
-              }
-            );
+            const targetEl = document.getElementById("google-signin-button");
+            if (targetEl) {
+              window.google.accounts.id.renderButton(
+                targetEl,
+                {
+                  theme: "outline",
+                  size: "large",
+                  width: "100%",
+                  text: "signin_with",
+                }
+              );
+            }
           }
         });
       } catch (err) {
@@ -135,7 +147,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       console.log("Google logged in successfully:", userPayload);
       onLogin(userPayload, token);
-      navigate(getRedirectPath(userPayload.role));
+      navigate(getRedirectPath(userPayload.role, userPayload.email));
     } catch (err: any) {
       console.error(err);
       setError(
@@ -148,9 +160,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
+  const [showPassword, setShowPassword] = useState(false);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+
     setLoading(true);
 
     try {
@@ -159,7 +174,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const data = response.data;
       console.log("Logged in successfully:", data.user);
       onLogin(data.user, data.token);
-      navigate(getRedirectPath(data.user.role));
+      navigate(getRedirectPath(data.user.role, data.user.email));
     } catch (err: any) {
       setError(
         err.response?.data?.error ||
@@ -176,21 +191,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <div className="space-y-4 text-center text-white">
         <p className="text-sm uppercase tracking-[0.3em] text-[#3B82F6]/80">Secure Login Gate</p>
         <h1 className="text-4xl font-semibold sm:text-5xl">Access VJ Network</h1>
-        <p className="text-sm text-[#9CA3AF]">
-          Sign in to your account. Roles are automatically verified and mapped based on your email domain and prefix.
-        </p>
       </div>
 
       <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-8 shadow-2xl">
-        <CardHeader className="p-0 pb-6">
-          <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
-            <Shield className="h-6 w-6 text-[#3B82F6]" />
-            Credentials Sign In
-          </CardTitle>
-          <CardDescription className="text-[#9CA3AF]">
-            Your connection is encrypted with SQLCipher database-level protection.
-          </CardDescription>
-        </CardHeader>
         <CardContent className="p-0">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -226,13 +229,21 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-500" />
                 <Input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 h-11 border-[#1F2937] bg-[#0A0A0A] text-white focus:border-[#3B82F6] rounded-xl"
+                  className="pl-10 pr-10 h-11 border-[#1F2937] bg-[#0A0A0A] text-white focus:border-[#3B82F6] rounded-xl"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-gray-400 hover:text-white transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
 

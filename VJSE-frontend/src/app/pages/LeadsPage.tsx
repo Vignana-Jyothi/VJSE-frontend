@@ -206,7 +206,7 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
         <p className="text-sm uppercase tracking-[0.3em] text-[#3B82F6]/80">Mentor Dashboard</p>
         <h1 className="text-4xl font-semibold sm:text-5xl">Your Mentored Startups</h1>
         <p className="max-w-2xl text-base leading-7 text-[#D1D5DB]">
-          View startups you mentor, track progress, and message founders directly.
+          View startups you mentor and track platform approved leads.
         </p>
       </div>
 
@@ -216,14 +216,10 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
           <p className="text-sm uppercase tracking-[0.28em] text-[#9CA3AF]">Connected startups</p>
           <p className="mt-4 text-3xl font-semibold text-[#3B82F6]">{mentoredStartups.length}</p>
-        </Card>
-        <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
-          <p className="text-sm uppercase tracking-[0.28em] text-[#9CA3AF]">Active chats</p>
-          <p className="mt-4 text-3xl font-semibold text-[#22C55E]">{mentoredStartups.length}</p>
         </Card>
         <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
           <p className="text-sm uppercase tracking-[0.28em] text-[#9CA3AF]">Platform Approved Leads</p>
@@ -233,125 +229,28 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
 
       {mentoredStartups.length === 0 ? (
         <Card className="rounded-[28px] border border-[#1F2937] bg-[#111111] p-12 text-center text-[#9CA3AF]">
-          <MessageSquare className="h-10 w-10 text-gray-600 mx-auto mb-3" />
           <p className="text-lg font-semibold text-white">No active startup connections found</p>
-          <p className="text-sm mt-1">Once a founder requests introduction and connects, their startup will appear here.</p>
+          <p className="text-sm mt-1">Once a founder connects, their startup details will appear here.</p>
         </Card>
       ) : (
-        <>
-          <div className="grid gap-4 xl:grid-cols-3">
-            {mentoredStartups.map((startup) => (
-              <Card 
-                key={startup.id} 
-                onClick={() => setSelectedStartupId(startup.id)}
-                className={`cursor-pointer rounded-[24px] border p-6 shadow-sm transition duration-200 ${
-                  selectedStartup?.id === startup.id 
-                    ? "border-[#3B82F6] bg-[#3B82F6]/5" 
-                    : "border-[#1F2937] bg-[#111111] hover:border-gray-800"
-                }`}
-              >
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.24em] text-[#9CA3AF]">{startup.stage} Stage</p>
-                    <h2 className="mt-3 text-2xl font-semibold text-white">{startup.name}</h2>
-                    <p className="mt-2 text-sm text-[#D1D5DB]">Industry: {startup.focus}</p>
-                  </div>
-                  <div className="space-y-2 rounded-2xl bg-[#0A0A0A] p-4 text-xs text-[#9CA3AF] border border-[#1F2937]/50">
-                    <p className="font-semibold text-white">Current goal:</p>
-                    <p className="mt-1 leading-relaxed">{startup.currentGoal}</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          {selectedStartup && (
-            <Card className="rounded-[28px] border border-[#1F2937] bg-[#111111] p-6 shadow-xl">
-              <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-                <div className="space-y-4 flex flex-col justify-between">
-                  <div className="flex items-center justify-between gap-4 border-b border-[#1F2937] pb-4">
-                    <div>
-                      <p className="text-sm uppercase tracking-[0.3em] text-[#3B82F6]/80">Chat window</p>
-                      <h2 className="text-2xl font-semibold text-white">{selectedStartup.name} Conversation</h2>
-                    </div>
-                    <span className="rounded-full bg-[#0A0A0A] border border-[#1F2937] px-4 py-2 text-sm text-[#9CA3AF]">
-                      {selectedStartup.stage} Stage
-                    </span>
-                  </div>
-
-                  {/* Chats */}
-                  <div className="space-y-4 overflow-y-auto rounded-[24px] border border-[#27272A] bg-[#0A0A0A] p-5 text-sm text-[#D1D5DB] max-h-[350px] min-h-[250px]">
-                    {messages.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-[#9CA3AF] py-12">
-                        <MessageSquare className="h-10 w-10 text-gray-700 mb-2" />
-                        <p className="text-sm font-semibold text-white">No messages yet</p>
-                        <p className="text-xs mt-1">Send a message to start conversing with the founder!</p>
-                      </div>
-                    ) : (
-                      messages.map((message) => {
-                        const isLead = message.sender === "Lead";
-                        return (
-                          <div key={message.id} className={isLead ? "text-right" : "text-left"}>
-                            <div className={`inline-block rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
-                              isLead 
-                                ? "bg-[#3B82F6] text-white rounded-br-none" 
-                                : "bg-[#111111] text-white border border-[#1F2937] rounded-bl-none"
-                            }`}>
-                              <p className="font-semibold text-white">{isLead ? "You (Mentor)" : "Founder"}</p>
-                              <p className="mt-1 leading-relaxed">{message.content}</p>
-                              <span className={`block text-[9px] mt-1.5 ${isLead ? "text-[#E0F2FE]/70" : "text-[#9CA3AF]"}`}>
-                                {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* Send Chat */}
-                  <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-[#1F2937] pt-4">
-                    <Input
-                      placeholder={`Type a message to ${selectedStartup.name} founder...`}
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      className="flex-1 bg-[#0A0A0A] border-[#1F2937] focus:border-[#3B82F6] text-white rounded-xl h-11"
-                    />
-                    <Button
-                      type="submit"
-                      disabled={sendingMessage || !chatInput.trim()}
-                      className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl px-4 h-11"
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </form>
-                </div>
-
-                <div className="rounded-[24px] border border-[#27272A] bg-[#0A0A0A] p-6 space-y-6">
-                  <p className="text-sm uppercase tracking-[0.3em] text-[#9CA3AF] border-b border-[#1F2937] pb-3">Startup details</p>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-xs uppercase text-[#9CA3AF]">Startup Name</p>
-                      <p className="mt-1 text-lg font-bold text-white">{selectedStartup.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-[#9CA3AF]">Sector / Focus</p>
-                      <p className="mt-1 text-white">{selectedStartup.focus}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-[#9CA3AF]">Development Stage</p>
-                      <p className="mt-1 text-white">{selectedStartup.stage}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-[#9CA3AF]">Active Mentorship Goals</p>
-                      <p className="mt-1 text-white leading-relaxed text-sm">{selectedStartup.currentGoal}</p>
-                    </div>
-                  </div>
-                </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          {mentoredStartups.map((startup) => (
+            <Card 
+              key={startup.id} 
+              className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm space-y-4"
+            >
+              <div>
+                <p className="text-sm uppercase tracking-[0.24em] text-[#9CA3AF]">{startup.stage} Stage</p>
+                <h2 className="mt-3 text-2xl font-semibold text-white">{startup.name}</h2>
+                <p className="mt-2 text-sm text-[#D1D5DB]">Focus: {startup.focus}</p>
+              </div>
+              <div className="space-y-2 rounded-2xl bg-[#0A0A0A] p-4 text-xs text-[#9CA3AF] border border-[#1F2937]/50">
+                <p className="font-semibold text-white">Current goal:</p>
+                <p className="mt-1 leading-relaxed">{startup.currentGoal}</p>
               </div>
             </Card>
-          )}
-        </>
+          ))}
+        </div>
       )}
 
       {/* Network table of leads */}

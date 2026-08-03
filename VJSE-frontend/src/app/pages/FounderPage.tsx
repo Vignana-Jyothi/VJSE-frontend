@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import ChatComponent from "../components/Chat";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
@@ -67,7 +66,7 @@ interface ChatMessage {
 }
 
 export function FounderPage({ user, onLogin }: FounderPageProps) {
-  const [activeTab, setActiveTab] = useState<"profile" | "browse" | "requests" | "chats">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "browse">("profile");
   
   // Profile State
   const [startup, setStartup] = useState<StartupProfile | null>(null);
@@ -370,36 +369,6 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
           <Search className="h-4 w-4" />
           Browse Approved Leads
         </button>
-        <button
-          onClick={() => {
-            setActiveTab("requests");
-            if (user) fetchConnections(user.id);
-          }}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-            activeTab === "requests"
-              ? "bg-[#3B82F6] text-white shadow-md"
-              : "text-[#9CA3AF] hover:bg-[#111111] hover:text-white"
-          }`}
-        >
-          <Users className="h-4 w-4" />
-          My Requests
-        </button>
-        <button
-          onClick={() => setActiveTab("chats")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-            activeTab === "chats"
-              ? "bg-[#3B82F6] text-white shadow-md"
-              : "text-[#9CA3AF] hover:bg-[#111111] hover:text-white"
-          }`}
-        >
-          <MessageSquare className="h-4 w-4" />
-          Chats & Connections
-          {connections.filter(c => c.status === "Pending").length > 0 && (
-            <span className="ml-1 rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-500">
-              {connections.filter(c => c.status === "Pending").length}
-            </span>
-          )}
-        </button>
       </div>
 
       {/* TAB 1: Startup Profile */}
@@ -684,81 +653,6 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
         </div>
       )}
 
-      {/* TAB 2.5: My Requests */}
-      {activeTab === "requests" && (
-        <Card className="rounded-[28px] border border-[#1F2937] bg-[#111111] p-6 shadow-xl">
-          <CardHeader className="p-0 pb-6">
-            <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
-              <Users className="h-5 w-5 text-[#3B82F6]" />
-              Introduction & Connection Requests
-            </CardTitle>
-            <CardDescription className="text-[#9CA3AF]">
-              Track your requests to connect with approved professional leads.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loadingConnections ? (
-              <div className="py-12 text-center text-sm text-[#9CA3AF]">Loading connection requests...</div>
-            ) : connections.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[#27272A] bg-[#0A0A0A]/40 p-8 text-center text-sm text-[#9CA3AF]">
-                <AlertCircle className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
-                <p className="font-semibold text-white">No connection requests sent yet</p>
-                <p className="mt-1">Browse approved leads to start requesting introductions.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="text-[#9CA3AF] border-b border-[#1F2937]/50">
-                      <TableHead className="text-left font-bold text-sm">Lead Name</TableHead>
-                      <TableHead className="text-left font-bold text-sm">Domain</TableHead>
-                      <TableHead className="text-left font-bold text-sm">Organisation</TableHead>
-                      <TableHead className="text-left font-bold text-sm">Referred By</TableHead>
-                      <TableHead className="text-left font-bold text-sm">Date Requested</TableHead>
-                      <TableHead className="text-left font-bold text-sm">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {connections.map((c) => {
-                      let badgeClass = "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20";
-                      if (c.status === "Intro Made") {
-                        badgeClass = "bg-blue-500/10 text-blue-400 border border-blue-500/20";
-                      } else if (c.status === "Connected" || c.status === "Accepted") {
-                        badgeClass = "bg-green-500/10 text-green-400 border border-green-500/20";
-                      }
-                      
-                      return (
-                        <TableRow key={c.id} className="border-b border-[#1F2937]/50 hover:bg-[#1C1C1C]/40 transition">
-                          <TableCell className="text-white font-semibold py-4">{c.lead?.name || "N/A"}</TableCell>
-                          <TableCell className="py-4 text-[#D1D5DB]">{c.lead?.domain || "N/A"}</TableCell>
-                          <TableCell className="py-4 text-[#D1D5DB]">{c.lead?.organization || "N/A"}</TableCell>
-                          <TableCell className="py-4 text-[#D1D5DB]">{c.lead?.sourcer?.name || "N/A"}</TableCell>
-                          <TableCell className="py-4 text-[#9CA3AF]">{new Date(c.createdAt).toLocaleDateString()}</TableCell>
-                          <TableCell className="py-4">
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
-                              {c.status === "Accepted" ? "Connected" : c.status}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* TAB 3: Connections & Real-time Chats */}
-      {activeTab === "chats" && (
-        <div className="h-[600px] border border-[#1F2937] rounded-[28px] overflow-hidden bg-[#111111] shadow-2xl">
-          <ChatComponent 
-            currentUser={{ id: "founder-123", name: "Rahul Verma" }}
-            targetUser={{ id: "sourcer-456", name: "Ananya Sharma" }}
-          />
-        </div>
-      )}
       {/* Confirmation Dialog */}
       {confirmingLeadId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">

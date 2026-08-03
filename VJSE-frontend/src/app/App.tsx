@@ -79,7 +79,7 @@ export default function App() {
     } else {
       setUser({
         id: loginData.id,
-        fullName: loginData.name,
+        fullName: (loginData as any).fullName || loginData.name || "VJ User",
         email: loginData.email,
         role: loginData.role,
       });

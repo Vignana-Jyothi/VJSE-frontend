@@ -10,12 +10,12 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
 
 // Email 1 — Sent to LEAD asking if they are aware and willing
 async function sendLeadInviteEmail({ leadEmail, leadName, founderName, startupName, sourcerName, inviteToken, connectionId }) {
-  const yesLink = `${process.env.APP_BASE_URL || 'http://localhost:5173'}/api/invite/respond?token=${inviteToken}&response=yes&connectionId=${connectionId}`;
-  const noLink = `${process.env.APP_BASE_URL || 'http://localhost:5173'}/api/invite/respond?token=${inviteToken}&response=no&connectionId=${connectionId}`;
+  const yesLink = `${process.env.APP_BASE_URL || 'http://localhost:3000'}/api/invite/respond?token=${inviteToken}&response=yes&connectionId=${connectionId}`;
+  const noLink = `${process.env.APP_BASE_URL || 'http://localhost:3000'}/api/invite/respond?token=${inviteToken}&response=no&connectionId=${connectionId}`;
 
   const mailOptions = {
     from: `"VJ Startups" <${process.env.EMAIL_FROM}>`,
@@ -67,12 +67,12 @@ async function sendLeadInviteEmail({ leadEmail, leadName, founderName, startupNa
   console.log(`✉️ Lead invite email sent to: ${leadEmail}`);
 }
 
-// Email 2 — Sent to SOURCER notifying them the invite has been sent
+// Email 2 — Sent to SOURCER requesting warm introduction to the lead
 async function sendSourcerNotificationEmail({ sourcerEmail, sourcerName, leadName, founderName }) {
   const mailOptions = {
     from: `"VJ Startups" <${process.env.EMAIL_FROM}>`,
     to: sourcerEmail,
-    subject: `Update: An invitation has been sent to ${leadName}`,
+    subject: `Warm Introduction Request: ${founderName} wants to connect with ${leadName}`,
     html: `
       <div style="font-family: Georgia, serif; max-width: 620px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
         <h2 style="color: #111827; font-size: 22px; margin-bottom: 4px;">VJ Startups</h2>
@@ -82,19 +82,27 @@ async function sendSourcerNotificationEmail({ sourcerEmail, sourcerName, leadNam
         <p style="font-size: 15px; color: #111827;">Dear ${sourcerName},</p>
 
         <p style="font-size: 15px; color: #374151; line-height: 1.7;">
-          Thank you for contributing to the VJ Startups ecosystem. We wanted to let you know that 
-          an invitation has been sent to <strong>${leadName}</strong>, whose contact details you 
-          shared with us.
+          Thank you for submitting the lead for <strong>${leadName}</strong> to the VJ Startups platform!
         </p>
 
         <p style="font-size: 15px; color: #374151; line-height: 1.7;">
-          <strong>${founderName}</strong> has expressed interest in connecting with them. 
-          We have reached out to ${leadName} to confirm their willingness and awareness.
+          <strong>${founderName}</strong>, a student startup founder in our ecosystem, has reviewed 
+          ${leadName}'s profile and requested a connection to seek guidance and potential mentorship.
         </p>
 
+        <div style="background-color: #F3F4F6; border-left: 4px solid #3B82F6; padding: 16px; margin: 20px 0; border-radius: 4px;">
+          <p style="font-size: 15px; color: #1F2937; margin: 0; font-weight: bold;">
+            Warm Introduction Request:
+          </p>
+          <p style="font-size: 14px; color: #4B5563; margin: 8px 0 0 0; line-height: 1.6;">
+            Since you submitted this lead, could you please provide a warm introduction connecting 
+            <strong>${founderName}</strong> with <strong>${leadName}</strong> over email or WhatsApp? 
+            A personal introduction from you will help build initial trust.
+          </p>
+        </div>
+
         <p style="font-size: 15px; color: #374151; line-height: 1.7;">
-          We will keep you updated on their response. If ${leadName} agrees, 
-          we will notify you to facilitate the warm introduction.
+          We have also sent an automated notification email to ${leadName} to confirm their availability.
         </p>
 
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
@@ -106,12 +114,12 @@ async function sendSourcerNotificationEmail({ sourcerEmail, sourcerName, leadNam
   };
 
   await transporter.sendMail(mailOptions);
-  console.log(`✉️ Sourcer notification email sent to: ${sourcerEmail}`);
+  console.log(`✉️ Warm intro request email sent to sourcer: ${sourcerEmail}`);
 }
 
 // Email 3 — Sent to LEAD after they click Yes I am in
 async function sendWelcomeEmail({ leadEmail, leadName, founderName, startupName }) {
-  const signupLink = `${APP_BASE_URL}`;
+  const signupLink = process.env.FRONTEND_URL || 'http://localhost:5173';
 
   const mailOptions = {
     from: `"VJ Startups" <${process.env.EMAIL_FROM}>`,

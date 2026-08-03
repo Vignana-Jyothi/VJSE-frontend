@@ -49,6 +49,19 @@ export const organisationTypes = [
   "Other",
 ];
 
+export const professionOptions = [
+  "Business / Entrepreneur",
+  "Teacher / Educator",
+  "Software Engineer / Tech Professional",
+  "Doctor / Healthcare Professional",
+  "Consultant / Advisor",
+  "Investor / Venture Capitalist",
+  "Marketing / Sales Professional",
+  "Lawyer / Legal Professional",
+  "Chartered Accountant / Financial Advisor",
+  "Other",
+];
+
 export const relationshipOptions = [
   "Parent",
   "Sibling",

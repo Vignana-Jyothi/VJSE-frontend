@@ -1,10 +1,9 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Checkbox } from "../components/ui/checkbox";
 import { LoginGate } from "../components/LoginGate";
 import {
   cityOptions,
@@ -12,6 +11,7 @@ import {
   helpOptions,
   organisationTypes,
   relationshipOptions,
+  professionOptions,
 } from "../data/network";
 
 interface SubmitLeadPageProps {
@@ -21,10 +21,21 @@ interface SubmitLeadPageProps {
 }
 
 export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps) {
+  const [yourName, setYourName] = useState(user?.fullName || "");
+
+  useEffect(() => {
+    if (user?.fullName) {
+      setYourName(user.fullName);
+    }
+  }, [user]);
+
   const [leadName, setLeadName] = useState("");
   const [leadEmail, setLeadEmail] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [socialMedia, setSocialMedia] = useState("");
   const [relationship, setRelationship] = useState(relationshipOptions[0]);
-  const [role, setRole] = useState("");
+  const [professionSelect, setProfessionSelect] = useState(professionOptions[0]);
+  const [customProfession, setCustomProfession] = useState("");
   const [organisationType, setOrganisationType] = useState(organisationTypes[0]);
   const [organisationName, setOrganisationName] = useState("");
   const [city, setCity] = useState(cityOptions[0]);
@@ -50,11 +61,29 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
     );
   };
 
+  function validateLeadEmail(emailToTest: string): boolean {
+    const trimmed = emailToTest.trim().toLowerCase();
+    return trimmed.endsWith("@gmail.com") || trimmed.endsWith("@vnrvjiet.in");
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!consent) {
       return;
     }
+
+    const trimmedEmail = leadEmail.trim().toLowerCase();
+    const isStandardDomain = trimmedEmail.endsWith("@gmail.com") || trimmedEmail.endsWith("@vnrvjiet.in");
+    if (!isStandardDomain) {
+      const confirmed = window.confirm(
+        `The email domain "${trimmedEmail.split('@')[1] || trimmedEmail}" is non-standard (not @gmail.com or @vnrvjiet.in).\n\nDo you want to proceed with this email address?`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const finalRole = professionSelect === "Other" ? (customProfession.trim() || "Other") : professionSelect;
 
     setLoading(true);
     setError("");
@@ -65,9 +94,13 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
         body: JSON.stringify({
           name: leadName,
           email: leadEmail,
+          phone: leadPhone,
+          socialMedia: socialMedia,
+          role: finalRole,
           domain: selectedDomains[0] || "Other",
           organization: organisationName,
-          skills: selectedHelps.join(", ")
+          skills: selectedHelps.join(", "),
+          sourcerId: user.id
         })
       });
 
@@ -79,7 +112,10 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
       onSubmit();
       setLeadName("");
       setLeadEmail("");
-      setRole("");
+      setLeadPhone("");
+      setSocialMedia("");
+      setProfessionSelect(professionOptions[0]);
+      setCustomProfession("");
       setOrganisationName("");
       setSelectedDomains([]);
       setSelectedHelps([]);
@@ -114,17 +150,18 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-sm text-[#E5E7EB]">Your Name</Label>
-                <div className="relative">
-                  <Input disabled value={user.fullName} className="pr-10 bg-[#111111] text-white" />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
-                    <Lock className="size-4" />
-                  </span>
-                </div>
+                <Input
+                  value={yourName}
+                  onChange={(e) => setYourName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="bg-[#111111] text-white"
+                  required
+                />
               </div>
               <div className="space-y-2">
-                <Label className="text-sm text-[#E5E7EB]">Your Email</Label>
+                <Label className="text-sm text-[#E5E7EB]">Your Email (Autofilled)</Label>
                 <div className="relative">
-                  <Input disabled value={user.email} className="pr-10 bg-[#111111] text-white" />
+                  <Input disabled value={user.email} className="pr-10 bg-[#111111] text-white cursor-not-allowed opacity-80" />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
                     <Lock className="size-4" />
                   </span>
@@ -147,14 +184,41 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
                 />
               </div>
 
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="leadEmail" className="text-sm text-[#E5E7EB]">Lead's Email</Label>
+                  <Input
+                    id="leadEmail"
+                    type="email"
+                    value={leadEmail}
+                    onChange={(event) => setLeadEmail(event.target.value)}
+                    placeholder="name@example.com"
+                    className="bg-[#111111] text-white"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="leadPhone" className="text-sm text-[#E5E7EB]">Lead's Phone Number</Label>
+                  <Input
+                    id="leadPhone"
+                    type="tel"
+                    value={leadPhone}
+                    onChange={(event) => setLeadPhone(event.target.value)}
+                    placeholder="+91 9876543210"
+                    className="bg-[#111111] text-white"
+                    required
+                  />
+                </div>
+              </div>
+
               <div className="grid gap-2">
-                <Label htmlFor="leadEmail" className="text-sm text-[#E5E7EB]">Lead's Email</Label>
+                <Label htmlFor="socialMedia" className="text-sm text-[#E5E7EB]">Social Media Handle / Personal Website / LinkedIn Profile</Label>
                 <Input
-                  id="leadEmail"
-                  type="email"
-                  value={leadEmail}
-                  onChange={(event) => setLeadEmail(event.target.value)}
-                  placeholder="Enter email address"
+                  id="socialMedia"
+                  type="url"
+                  value={socialMedia}
+                  onChange={(event) => setSocialMedia(event.target.value)}
+                  placeholder="https://linkedin.com/in/username or https://example.com"
                   className="bg-[#111111] text-white"
                   required
                 />
@@ -177,17 +241,35 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
                   </select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="role" className="text-sm text-[#E5E7EB]">Their Profession / Role</Label>
+                  <Label htmlFor="professionSelect" className="text-sm text-[#E5E7EB]">Their Profession / Domain</Label>
+                  <select
+                    id="professionSelect"
+                    value={professionSelect}
+                    onChange={(event) => setProfessionSelect(event.target.value)}
+                    className="w-full rounded-md border border-[#27272A] bg-[#111111] px-3 py-2 text-white outline-none focus:border-[#3B82F6]"
+                  >
+                    {professionOptions.map((option) => (
+                      <option key={option} value={option} className="bg-[#111111] text-white">
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {professionSelect === "Other" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="customProfession" className="text-sm text-[#E5E7EB]">Specify Other Profession</Label>
                   <Input
-                    id="role"
-                    value={role}
-                    onChange={(event) => setRole(event.target.value)}
-                    placeholder="Product Manager, Advisor, etc."
+                    id="customProfession"
+                    value={customProfession}
+                    onChange={(event) => setCustomProfession(event.target.value)}
+                    placeholder="Enter specific profession"
                     className="bg-[#111111] text-white"
                     required
                   />
                 </div>
-              </div>
+              )}
 
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="grid gap-2">
@@ -282,22 +364,17 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 rounded-2xl border border-[#1F2937] bg-[#111111] p-4">
-                <div className="mt-1 h-4 w-4 rounded-sm border border-[#3B82F6] bg-[#111111]" />
-                <div className="space-y-2 text-sm text-[#D1D5DB]">
-                  <p>
-                    <span className="text-[#EF4444]">*</span> I confirm this person is aware and willing to be contacted.
-                  </p>
-                  <label className="inline-flex cursor-pointer items-center gap-3 text-[#E5E7EB]">
-                    <input
-                      type="checkbox"
-                      checked={consent}
-                      onChange={(event) => setConsent(event.target.checked)}
-                      className="h-4 w-4 rounded border border-[#27272A] bg-[#111111] text-[#3B82F6] focus:ring-[#3B82F6]"
-                    />
-                    <span>I agree</span>
-                  </label>
-                </div>
+              <div className="rounded-2xl border border-[#1F2937] bg-[#111111] p-4">
+                <label className="flex cursor-pointer items-center gap-3 text-sm text-[#E5E7EB]">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(event) => setConsent(event.target.checked)}
+                    className="h-4 w-4 rounded border border-[#27272A] bg-[#111111] text-[#3B82F6] focus:ring-[#3B82F6]"
+                    required
+                  />
+                  <span>I confirm the information provided above is true and accurate</span>
+                </label>
               </div>
 
               <div className="space-y-2">
@@ -308,9 +385,6 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
                 >
                   {loading ? "Submitting..." : "Submit Lead →"}
                 </Button>
-                <p className="text-center text-sm text-[#9CA3AF]">
-                  No personal contact details (phone/email) are collected or stored.
-                </p>
               </div>
             </div>
           </form>
