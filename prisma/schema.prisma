@@ -30,6 +30,9 @@ model Lead {
   createdAt       DateTime           @default(now())
   connections     ConnectionRequest[]
   chatMessages    ChatMessage[]
+  rejectionLogs   SourcerRejectionLog[]
+  inviteToken     String?
+  inviteAccepted  Boolean                @default(false)
 }
 
 model User {
@@ -44,6 +47,9 @@ model User {
   connectionRequests ConnectionRequest[]
   chatMessages       ChatMessage[]
   submittedLeads     Lead[]             @relation("SourcerLeads")
+  rejectionCount     Int                    @default(0)
+  isBlocked          Boolean                @default(false)
+  rejectionLogs      SourcerRejectionLog[]
 }
 
 model StartupProfile {
@@ -63,8 +69,9 @@ model ConnectionRequest {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   leadId    Int      // Receiver (Lead)
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  status    String   // "Pending" | "Intro Made" | "Connected"
-  createdAt DateTime @default(now())
+  status        String   // "Pending" | "Intro Made" | "Connected"
+  createdAt     DateTime @default(now())
+  rejectionLogs SourcerRejectionLog[]
 
   @@unique([userId, leadId])
 }
@@ -78,4 +85,15 @@ model ChatMessage {
   sender    String   // "Founder" | "Lead" (to indicate who sent the message)
   content   String
   createdAt DateTime @default(now())
+}
+
+model SourcerRejectionLog {
+  id           Int               @id @default(autoincrement())
+  sourcerId    Int
+  sourcer      User              @relation(fields: [sourcerId], references: [id])
+  leadId       Int
+  lead         Lead              @relation(fields: [leadId], references: [id])
+  connectionId Int
+  connection   ConnectionRequest @relation(fields: [connectionId], references: [id])
+  createdAt    DateTime          @default(now())
 }
