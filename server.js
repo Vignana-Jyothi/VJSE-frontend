@@ -6,6 +6,7 @@ const cors = require('cors');
 const path = require('path');
 const session = require('express-session');
 const passport = require('passport');
+const { sendLeadInviteEmail, sendSourcerNotificationEmail, sendWelcomeEmail } = require('./mailer');
 
 const Database = require('better-sqlite3');
 
@@ -576,6 +577,55 @@ app.post('/api/connections', async (req, res) => {
     });
 
     console.log("Created connection request:", conn);
+
+    // Generate invite token and send emails
+    try {
+      const crypto = require('crypto');
+      const inviteToken = crypto.randomBytes(32).toString('hex');
+
+      // Save invite token to lead
+      await prisma.lead.update({
+        where: { id: parseInt(leadId) },
+        data: { inviteToken }
+      });
+
+      // Get lead with sourcer details
+      const lead = await prisma.lead.findUnique({
+        where: { id: parseInt(leadId) },
+        include: { sourcer: true }
+      });
+
+      // Get founder details
+      const founder = await prisma.user.findUnique({
+        where: { id: parseInt(userId) }
+      });
+
+      // Send email to lead
+      if (lead?.email) {
+        await sendLeadInviteEmail({
+          leadEmail: lead.email,
+          leadName: lead.name,
+          founderName: founder?.name || 'A VJ Startup Founder',
+          startupName: founder?.name || 'VJ Startup',
+          sourcerName: lead.sourcer?.name || 'a VJ student',
+          inviteToken,
+          connectionId: conn.id
+        });
+      }
+
+      // Send notification email to sourcer
+      if (lead?.sourcer?.email) {
+        await sendSourcerNotificationEmail({
+          sourcerEmail: lead.sourcer.email,
+          sourcerName: lead.sourcer.name,
+          leadName: lead.name,
+          founderName: founder?.name || 'A VJ Startup Founder'
+        });
+      }
+    } catch (emailErr) {
+      console.error('Email sending failed:', emailErr.message);
+    }
+
     res.status(201).json(conn);
   } catch (error) {
     console.error("Error sending connection request:", error);
@@ -814,6 +864,116 @@ app.get('/api/stats', async (req, res) => {
   } catch (error) {
     console.error("Error fetching platform stats:", error);
     res.status(500).json({ error: "Failed to fetch platform stats" });
+  }
+});
+
+app.get('/api/invite/respond', async (req, res) => {
+  try {
+    const { token, response, connectionId } = req.query;
+
+    if (!token || !response || !connectionId) {
+      return res.status(400).send('Invalid invite link.');
+    }
+
+    // Find lead by invite token
+    const lead = await prisma.lead.findFirst({
+      where: { inviteToken: token },
+      include: { sourcer: true, connections: true }
+    });
+
+    if (!lead) {
+      return res.status(404).send('This invite link is invalid or has already been used.');
+    }
+
+    // Find the connection request
+    const connection = await prisma.connectionRequest.findUnique({
+      where: { id: parseInt(connectionId) },
+      include: { user: true }
+    });
+
+    if (!connection) {
+      return res.status(404).send('Connection request not found.');
+    }
+
+    if (response === 'yes') {
+      // Mark lead as invite accepted
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { inviteAccepted: true, inviteToken: null }
+      });
+
+      // Update connection status to Intro Made
+      await prisma.connectionRequest.update({
+        where: { id: parseInt(connectionId) },
+        data: { status: 'Intro Made' }
+      });
+
+      // Send welcome email to lead
+      await sendWelcomeEmail({
+        leadEmail: lead.email,
+        leadName: lead.name,
+        founderName: connection.user?.name || 'The Founder',
+        startupName: connection.user?.name || 'VJ Startup'
+      });
+
+      return res.send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px;">
+            <h2 style="color: #1D9E75;">Thank you for your response!</h2>
+            <p>You have agreed to connect. The student who referred you will be in touch shortly to make the introduction.</p>
+            <p style="color: #6B7280; font-size: 14px;">You may close this tab.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    if (response === 'no') {
+      // Clear invite token
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { inviteToken: null }
+      });
+
+      // Update connection status to declined
+      await prisma.connectionRequest.update({
+        where: { id: parseInt(connectionId) },
+        data: { status: 'Declined' }
+      });
+
+      // Log rejection and increment sourcer rejection count
+      if (lead.sourcerId) {
+        await prisma.sourcerRejectionLog.create({
+          data: {
+            sourcerId: lead.sourcerId,
+            leadId: lead.id,
+            connectionId: parseInt(connectionId)
+          }
+        });
+
+        // Increment rejection count on sourcer
+        const updatedSourcer = await prisma.user.update({
+          where: { id: lead.sourcerId },
+          data: { rejectionCount: { increment: 1 } }
+        });
+
+        console.log(`Sourcer ${updatedSourcer.name} rejection count: ${updatedSourcer.rejectionCount}`);
+      }
+
+      return res.send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px;">
+            <h2 style="color: #374151;">Thank you for letting us know.</h2>
+            <p>We respect your decision and will not contact you again regarding this request.</p>
+            <p style="color: #6B7280; font-size: 14px;">You may close this tab.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    return res.status(400).send('Invalid response value.');
+  } catch (error) {
+    console.error('Error handling invite response:', error);
+    res.status(500).send('Something went wrong. Please try again later.');
   }
 });
 
