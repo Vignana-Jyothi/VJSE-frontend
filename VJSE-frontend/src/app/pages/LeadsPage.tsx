@@ -185,7 +185,7 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
             Your login email <span className="text-white font-semibold">{user.email}</span> does not match any approved Lead record in the database. 
           </p>
           <p className="mt-2 text-sm text-[#9CA3AF] max-w-lg mx-auto leading-relaxed">
-            To view mentored startups, a student must submit your profile as a lead, and it must be verified by a Startup Cell volunteer.
+            To view mentored startups, VNR VJIET student must submit your profile as a lead, and it must be verified by VJ STARTUPS volunteer.
           </p>
           <div className="mt-6 flex justify-center gap-4">
             <Button
