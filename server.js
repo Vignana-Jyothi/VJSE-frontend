@@ -5,6 +5,10 @@ const cors = require('cors');
 const path = require('path');
 const session = require('express-session');
 const passport = require('passport');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+const { OAuth2Client } = require('google-auth-library');
 const { sendLeadInviteEmail, sendSourcerNotificationEmail, sendWelcomeEmail } = require('./mailer');
 
 const Database = require('better-sqlite3');
@@ -13,8 +17,9 @@ const Database = require('better-sqlite3');
 class EncryptedDatabase extends Database {
   constructor(filename, options) {
     super(filename, options);
-    const key = process.env.DB_ENCRYPTION_KEY || 'my-super-secret-password';
-    console.log(`🔐 [Express SQLCipher] Authenticating database: ${filename}`);
+    const key = process.env.DB_ENCRYPTION_KEY;
+    if (!key) throw new Error('FATAL: DB_ENCRYPTION_KEY environment variable is required');
+    console.log(`[Express SQLCipher] Authenticating database: ${filename}`);
     this.pragma("cipher='sqlcipher'");
     this.pragma(`key='${key}'`);
     // Enable WAL mode and busy_timeout for concurrency
@@ -40,9 +45,9 @@ const useRealDb = process.env.USE_REAL_DB === 'true';
 const prisma = useRealDb ? realPrisma : mockPrisma;
 
 if (useRealDb) {
-  console.log(`🔐 [Express] Using REAL database with SQLCipher encryption.`);
+  console.log(`[Express] Using REAL database with SQLCipher encryption.`);
 } else {
-  console.log(`⚠️ [Express] Using in-memory mock database.`);
+  console.log(`[Express] WARNING: Using in-memory mock database.`);
 }
 
 // 3. Initialize Express
@@ -64,6 +69,10 @@ const allowedOrigins = [
   'http://127.0.0.1:5175',
 ];
 
+// --- SECURITY MIDDLEWARE ---
+app.use(helmet());
+app.use(compression());
+
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true);
@@ -72,34 +81,98 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// --- RATE LIMITERS ---
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 200,                    // 200 requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+app.use(globalLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 10,                    // 10 login attempts per 15 min
+  message: { error: 'Too many login attempts. Please try again later.' },
+  skipSuccessfulRequests: true,
+});
+
+const emailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  max: 10,                    // 10 email-triggering requests per hour per IP
+  message: { error: 'Too many requests. Please try again later.' },
+});
 
 // Configure Sessions and Passport Middlewares
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret || sessionSecret === 'a-fallback-session-secret' || sessionSecret === 'a-secure-random-session-secret-key') {
+  console.error('WARNING: SESSION_SECRET is weak or missing. Generate a strong random secret for production.');
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'a-fallback-session-secret',
+  secret: sessionSecret || 'dev-only-fallback-secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false } // Set to true if running over HTTPS
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',  // HTTPS only in production
+    httpOnly: true,                                   // Prevent JS access to cookie
+    sameSite: 'lax',                                  // CSRF protection
+    maxAge: 24 * 60 * 60 * 1000,                      // 24 hour expiry
+  }
 }));
 
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Log incoming requests
+// Log incoming requests with timing
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+  });
   next();
 });
 
-// Utility to decode Google ID token (JWT) without libraries
-function decodeJWT(token) {
+// --- AUTHENTICATION & AUTHORIZATION MIDDLEWARE ---
+function requireAuth(req, res, next) {
+  if (req.session && req.session.user) {
+    return next();
+  }
+  if (req.isAuthenticated && req.isAuthenticated()) {
+    return next();
+  }
+  return res.status(401).json({ error: 'Authentication required' });
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.session?.user && !(req.isAuthenticated && req.isAuthenticated())) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const userRole = req.session?.user?.role || req.user?.role;
+    if (!roles.includes(userRole)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+}
+
+// Google OAuth token verification (cryptographically verified)
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+async function verifyGoogleToken(token) {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payload = parts[1];
-    const decoded = Buffer.from(payload, 'base64').toString('utf8');
-    return JSON.parse(decoded);
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    return ticket.getPayload();
   } catch (e) {
+    console.error('Google token verification failed:', e.message);
     return null;
   }
 }
@@ -145,28 +218,34 @@ app.post('/api/chat/token', async (req, res) => {
   }
 });
 
-// GET /health - Simple health check for debugging
-app.get('/health', (req, res) => {
-  res.json({ ok: true, message: 'server is up' });
+// GET /health - Health check with DB connectivity test
+app.get('/health', async (req, res) => {
+  try {
+    // Verify database is responsive
+    await prisma.user.count();
+    res.json({ ok: true, db: 'connected', uptime: process.uptime() });
+  } catch (err) {
+    res.status(503).json({ ok: false, db: 'disconnected', uptime: process.uptime() });
+  }
 });
 
-// POST /auth/google - Authenticate Google ID token locally
-app.post('/auth/google', async (req, res) => {
+// POST /auth/google - Authenticate Google ID token (cryptographically verified)
+app.post('/auth/google', authLimiter, async (req, res) => {
   try {
     const token = req.body.token || req.body.idToken || req.body.credential;
     if (!token) {
       return res.status(400).json({ error: "Missing Google ID token" });
     }
 
-    const profile = decodeJWT(token);
+    const profile = await verifyGoogleToken(token);
     if (!profile || !profile.email) {
-      return res.status(400).json({ error: "Invalid Google ID token format" });
+      return res.status(401).json({ error: "Invalid or expired Google ID token" });
     }
 
     const email = profile.email;
     const normalized = normalizeEmail(email);
     
-    console.log("Decoded Google profile:", profile);
+    console.log("Verified Google profile for:", profile.email);
 
     if (!profile.sub) {
       return res.status(400).json({ error: "Invalid Google ID token: Missing subject (sub) identifier" });
@@ -235,18 +314,31 @@ app.post('/auth/google', async (req, res) => {
 
     res.json({ user: req.session.user });
   } catch (error) {
-    console.error("Error in mock /auth/google:", error);
-    if (error.stack) {
-      console.error(error.stack);
-    }
-    res.status(500).json({ error: "Failed to authenticate Google user: " + error.message });
+    console.error("Error in /auth/google:", error);
+    res.status(500).json({ error: "Authentication failed. Please try again." });
   }
 });
 
-// GET /check-auth - Verify existing session
-app.get('/check-auth', (req, res) => {
+// GET /check-auth - Verify existing session (always fetch fresh from DB)
+app.get('/check-auth', async (req, res) => {
   if (req.session && req.session.user) {
-    return res.json({ user: req.session.user });
+    try {
+      const freshUser = await prisma.user.findUnique({
+        where: { id: req.session.user.id }
+      });
+      if (freshUser) {
+        // Refresh the session with latest DB data
+        req.session.user = {
+          id: freshUser.id,
+          name: freshUser.name,
+          email: freshUser.email,
+          role: freshUser.role
+        };
+        return res.json({ user: req.session.user });
+      }
+    } catch (err) {
+      console.error('Error refreshing session from DB:', err);
+    }
   }
   res.status(401).json({ error: "Not authenticated" });
 });
@@ -304,7 +396,7 @@ app.post('/api/logout', (req, res, next) => {
 });
 
 // POST /api/login - Log in user or auto-signup new @vnrvjiet.in accounts
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -325,16 +417,13 @@ app.post('/api/login', async (req, res) => {
         return res.status(403).json({ error: "Your account has been blacklisted. Please contact an Admin." });
       }
 
-      // Check password
+      // Check password (bcrypt only — no plaintext fallback)
       if (user.password) {
         let passwordMatch = false;
         try {
           passwordMatch = await bcrypt.compare(password, user.password);
         } catch (e) {
           passwordMatch = false;
-        }
-        if (!passwordMatch && password === user.password) {
-          passwordMatch = true;
         }
         if (!passwordMatch) {
           return res.status(401).json({ error: "Invalid email or password" });
@@ -397,7 +486,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // GET /api/leads - Retrieve all leads (optionally filter by domain or verified status)
-app.get('/api/leads', async (req, res) => {
+app.get('/api/leads', requireAuth, async (req, res) => {
   try {
     const { domain, verified } = req.query;
     
@@ -422,9 +511,9 @@ app.get('/api/leads', async (req, res) => {
 });
 
 // POST /api/leads - Create a new lead
-app.post('/api/leads', async (req, res) => {
+app.post('/api/leads', requireAuth, async (req, res) => {
   try {
-    const { name, email, domain, organization, sourcerId } = req.body;
+    const { name, email, domain, organization, city, skills, sourcerId } = req.body;
 
     if (!name || !email || !domain || !organization) {
       return res.status(400).json({ error: "Missing required fields (name, email, domain, organization)" });
@@ -440,6 +529,8 @@ app.post('/api/leads', async (req, res) => {
         email: normalizedEmail,
         domain,
         organization,
+        city: city || '',
+        skills: skills || '',
         verified: false,
         sourcerId: sId
       }
@@ -454,7 +545,7 @@ app.post('/api/leads', async (req, res) => {
 });
 
 // PATCH /api/leads/:id/verify - Update verification status of a lead
-app.patch('/api/leads/:id/verify', async (req, res) => {
+app.patch('/api/leads/:id/verify', requireRole('Admin', 'Volunteer'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { verified } = req.body;
@@ -483,7 +574,7 @@ app.patch('/api/leads/:id/verify', async (req, res) => {
 });
 
 // DELETE /api/leads/:id - Delete a lead
-app.delete('/api/leads/:id', async (req, res) => {
+app.delete('/api/leads/:id', requireRole('Admin', 'Volunteer'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
@@ -506,7 +597,7 @@ app.delete('/api/leads/:id', async (req, res) => {
 // --- STARTUP PROFILE ENDPOINTS ---
 
 // GET /api/startup - Get startup profile for a user
-app.get('/api/startup', async (req, res) => {
+app.get('/api/startup', requireAuth, async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) {
@@ -525,7 +616,7 @@ app.get('/api/startup', async (req, res) => {
 });
 
 // POST /api/startup - Create or update startup profile
-app.post('/api/startup', async (req, res) => {
+app.post('/api/startup', requireRole('Founder'), async (req, res) => {
   try {
     const { userId, name, stage, focus, currentGoal } = req.body;
     if (!userId || !name || !stage || !focus || !currentGoal) {
@@ -551,7 +642,7 @@ app.post('/api/startup', async (req, res) => {
 // --- APPROVED LEADS ENDPOINTS ---
 
 // GET /api/approved-leads - Get verified/approved leads with filters
-app.get('/api/approved-leads', async (req, res) => {
+app.get('/api/approved-leads', requireAuth, async (req, res) => {
   try {
     const { domain, organization, skills } = req.query;
 
@@ -583,7 +674,7 @@ app.get('/api/approved-leads', async (req, res) => {
 
 
 // GET /api/connections - Retrieve connections (optionally filtered by userId)
-app.get('/api/connections', async (req, res) => {
+app.get('/api/connections', requireAuth, async (req, res) => {
   try {
     const { userId } = req.query;
     
@@ -612,7 +703,7 @@ app.get('/api/connections', async (req, res) => {
 });
 
 // POST /api/connections - Send connection request to a lead
-app.post('/api/connections', async (req, res) => {
+app.post('/api/connections', requireRole('Founder'), emailLimiter, async (req, res) => {
   try {
     const { userId, leadId } = req.body;
     if (!userId || !leadId) {
@@ -692,7 +783,7 @@ app.post('/api/connections', async (req, res) => {
 });
 
 // GET /api/users - Fetch all users for Admin Manage Access
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', requireRole('Admin'), async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -714,7 +805,7 @@ app.get('/api/users', async (req, res) => {
 });
 
 // PATCH /api/users/:id/role - Update user role
-app.patch('/api/users/:id/role', async (req, res) => {
+app.patch('/api/users/:id/role', requireRole('Admin'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { role } = req.body;
@@ -738,7 +829,7 @@ app.patch('/api/users/:id/role', async (req, res) => {
 });
 
 // PATCH /api/users/:id/blacklist - Blacklist or un-blacklist user
-app.patch('/api/users/:id/blacklist', async (req, res) => {
+app.patch('/api/users/:id/blacklist', requireRole('Admin'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { isBlocked } = req.body;
@@ -761,7 +852,7 @@ app.patch('/api/users/:id/blacklist', async (req, res) => {
 });
 
 // DELETE /api/users/:id - Kick / delete user account
-app.delete('/api/users/:id', async (req, res) => {
+app.delete('/api/users/:id', requireRole('Admin'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
@@ -781,8 +872,8 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
-// PATCH /api/connections/:id - Update connection status (e.g. Mock accept)
-app.patch('/api/connections/:id', async (req, res) => {
+// PATCH /api/connections/:id - Update connection status
+app.patch('/api/connections/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { status } = req.body;
@@ -807,7 +898,7 @@ app.patch('/api/connections/:id', async (req, res) => {
 // --- CHAT ENDPOINTS ---
 
 // GET /api/chats - Get messages between founder and lead
-app.get('/api/chats', async (req, res) => {
+app.get('/api/chats', requireAuth, async (req, res) => {
   try {
     const { userId, leadId } = req.query;
     if (!userId || !leadId) {
@@ -830,7 +921,7 @@ app.get('/api/chats', async (req, res) => {
 });
 
 // POST /api/chats - Send a message and generate a mock response
-app.post('/api/chats', async (req, res) => {
+app.post('/api/chats', requireAuth, async (req, res) => {
   try {
     const { userId, leadId, sender, content } = req.body;
     if (!userId || !leadId || !sender || !content) {
@@ -891,7 +982,7 @@ app.post('/api/chats', async (req, res) => {
 // --- VOLUNTEER REVIEW ENDPOINTS ---
 
 // PATCH /api/leads/:id/approve - Approve a lead submission
-app.patch('/api/leads/:id/approve', async (req, res) => {
+app.patch('/api/leads/:id/approve', requireRole('Admin', 'Volunteer'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -916,7 +1007,7 @@ app.patch('/api/leads/:id/approve', async (req, res) => {
 });
 
 // PATCH /api/leads/:id/reject - Reject a lead submission with a written reason
-app.patch('/api/leads/:id/reject', async (req, res) => {
+app.patch('/api/leads/:id/reject', requireRole('Admin', 'Volunteer'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { reason } = req.body;
@@ -946,7 +1037,7 @@ app.patch('/api/leads/:id/reject', async (req, res) => {
 });
 
 // POST /api/leads/:id/invite - Send email invitation to approved lead
-app.post('/api/leads/:id/invite', async (req, res) => {
+app.post('/api/leads/:id/invite', requireRole('Admin', 'Volunteer'), emailLimiter, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -983,7 +1074,7 @@ app.post('/api/leads/:id/invite', async (req, res) => {
 // --- ADDITIONAL API ENDPOINTS ---
 
 // GET /api/startups - Retrieve all startup profiles
-app.get('/api/startups', async (req, res) => {
+app.get('/api/startups', requireAuth, async (req, res) => {
   try {
     const profiles = await prisma.startupProfile.findMany({
       include: {
@@ -997,7 +1088,7 @@ app.get('/api/startups', async (req, res) => {
   }
 });
 
-// GET /api/stats - Retrieve platform-wide stats
+// GET /api/stats - Retrieve platform-wide stats (public)
 app.get('/api/stats', async (req, res) => {
   try {
     const totalLeads = await prisma.lead.count();
@@ -1125,9 +1216,40 @@ app.get('/api/invite/respond', async (req, res) => {
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`🚀 Express API server running on http://localhost:${PORT}`);
-  console.log(`📂 Connected to SQLCipher-encrypted SQLite DB (dev.db)`);
+// --- GLOBAL ERROR HANDLER (must be after all routes) ---
+app.use((err, req, res, next) => {
+  console.error(`[ERROR] ${req.method} ${req.path}:`, err);
+  res.status(500).json({ error: 'An internal error occurred' });
 });
 
+// --- GRACEFUL SHUTDOWN ---
+const server = app.listen(PORT, () => {
+  console.log(`Express API server running on http://localhost:${PORT}`);
+  console.log(`Database: SQLCipher-encrypted SQLite (dev.db)`);
+});
+
+const shutdownSignals = ['SIGTERM', 'SIGINT'];
+shutdownSignals.forEach(signal => {
+  process.on(signal, async () => {
+    console.log(`Received ${signal}. Starting graceful shutdown...`);
+    try {
+      await prisma.$disconnect();
+      console.log('Database connection closed.');
+    } catch (err) {
+      console.error('Error disconnecting database:', err);
+    }
+    server.close(() => {
+      console.log('HTTP server closed.');
+      process.exit(0);
+    });
+    // Force exit after 10 seconds if graceful shutdown hangs
+    setTimeout(() => {
+      console.error('Forced exit after timeout.');
+      process.exit(1);
+    }, 10000);
+  });
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});

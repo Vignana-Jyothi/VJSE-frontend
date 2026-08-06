@@ -6,7 +6,8 @@ const path = require('path');
 class EncryptedDatabase extends Database {
   constructor(filename, options) {
     super(filename, options);
-    const key = process.env.SQLCIPHER_KEY || 'my-super-secret-password';
+    const key = process.env.DB_ENCRYPTION_KEY || 'my-super-secret-password';
+    this.pragma("cipher='sqlcipher'");
     this.pragma(`key='${key}'`);
   }
 }

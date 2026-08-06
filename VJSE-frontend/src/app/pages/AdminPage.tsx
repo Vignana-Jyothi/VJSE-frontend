@@ -11,9 +11,10 @@ import { domainOptions } from "../data/network";
 interface AdminPageProps {
   user: { id: number; fullName: string; email: string; role: string } | null;
   onLogin: () => void;
+  onUserRefresh?: (updatedUser: { id: number; fullName: string; email: string; role: string }) => void;
 }
 
-export function AdminPage({ user, onLogin }: AdminPageProps) {
+export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
   const [leads, setLeads] = useState<any[]>([]);
   const [introRequests, setIntroRequests] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -26,6 +27,7 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
   const [filterBlacklist, setFilterBlacklist] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [roleSuccessId, setRoleSuccessId] = useState<number | null>(null);
 
   useEffect(() => {
     if (user && user.role === "Admin") {
@@ -77,7 +79,7 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
 
   async function handleRoleChange(userObj: any, newRole: string) {
     if (userObj.role === newRole) return;
-    
+
     const confirmed = window.confirm(
       `Are you sure you want to change the role of ${userObj.name} (${userObj.email}) from "${userObj.role}" to "${newRole}"?`
     );
@@ -91,9 +93,36 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
         body: JSON.stringify({ role: newRole }),
       });
       if (res.ok) {
+        // Refresh users table
         await fetchAdminData();
+
+        // Show per-row success indicator
+        setRoleSuccessId(userObj.id);
+        setTimeout(() => setRoleSuccessId(null), 2000);
+
+        // Fix 5: If admin changed their own role, refresh the top-level session
+        if (user && userObj.id === user.id && onUserRefresh) {
+          try {
+            const sessionRes = await fetch("/check-auth");
+            if (sessionRes.ok) {
+              const sessionData = await sessionRes.json();
+              const fresh = sessionData.user || sessionData;
+              if (fresh && fresh.email) {
+                onUserRefresh({
+                  id: fresh.id,
+                  fullName: fresh.fullName || fresh.name || "VJ User",
+                  email: fresh.email,
+                  role: fresh.role,
+                });
+              }
+            }
+          } catch (refreshErr) {
+            console.error("Failed to refresh own session after role change:", refreshErr);
+          }
+        }
       } else {
-        setError("Failed to update user role.");
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.error || "Failed to update user role.");
       }
     } catch (err) {
       console.error(err);
@@ -531,17 +560,24 @@ export function AdminPage({ user, onLogin }: AdminPageProps) {
                       <TableCell className="text-white font-semibold">{u.name}</TableCell>
                       <TableCell className="text-[#D1D5DB]">{u.email}</TableCell>
                       <TableCell>
-                        <select
-                          value={u.role}
-                          onChange={(e) => handleRoleChange(u, e.target.value)}
-                          className="rounded-lg border border-[#27272A] bg-[#0A0A0A] px-3 py-1.5 text-xs text-white outline-none focus:border-[#3B82F6]"
-                        >
-                          <option value="Student">Student</option>
-                          <option value="Mentor">Mentor</option>
-                          <option value="Founder">Founder</option>
-                          <option value="Volunteer">Volunteer</option>
-                          <option value="Admin">Admin</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={u.role}
+                            onChange={(e) => handleRoleChange(u, e.target.value)}
+                            className="rounded-lg border border-[#27272A] bg-[#0A0A0A] px-3 py-1.5 text-xs text-white outline-none focus:border-[#3B82F6]"
+                          >
+                            <option value="Student">Student</option>
+                            <option value="Mentor">Mentor</option>
+                            <option value="Founder">Founder</option>
+                            <option value="Volunteer">Volunteer</option>
+                            <option value="Admin">Admin</option>
+                          </select>
+                          {roleSuccessId === u.id && (
+                            <span className="text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5 animate-pulse">
+                              ✓ Updated!
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${

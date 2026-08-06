@@ -53,6 +53,7 @@ interface ConnectionRequest {
   userId: number;
   leadId: number;
   status: string;
+  createdAt?: string;
   lead: Lead;
 }
 
@@ -66,7 +67,7 @@ interface ChatMessage {
 }
 
 export function FounderPage({ user, onLogin }: FounderPageProps) {
-  const [activeTab, setActiveTab] = useState<"profile" | "browse">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "browse" | "requests">("profile");
   
   // Profile State
   const [startup, setStartup] = useState<StartupProfile | null>(null);
@@ -369,6 +370,17 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
           <Search className="h-4 w-4" />
           Browse Approved Leads
         </button>
+        <button
+          onClick={() => setActiveTab("requests")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+            activeTab === "requests"
+              ? "bg-[#3B82F6] text-white shadow-md"
+              : "text-[#9CA3AF] hover:bg-[#111111] hover:text-white"
+          }`}
+        >
+          <Send className="h-4 w-4" />
+          My Requests
+        </button>
       </div>
 
       {/* TAB 1: Startup Profile */}
@@ -651,6 +663,94 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 3: My Requests */}
+      {activeTab === "requests" && (
+        <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-xl space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Send className="h-5 w-5 text-[#3B82F6]" />
+                My Connection Requests
+              </h2>
+              <p className="text-sm text-[#9CA3AF] mt-1">
+                Track the status of warm introduction requests sent to domain experts and mentors.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchConnections(user.id)}
+              className="border-[#1F2937] bg-[#0A0A0A] text-white hover:bg-[#1C1C1C]"
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5 text-[#3B82F6]" />
+              Refresh Status
+            </Button>
+          </div>
+
+          {loadingConnections ? (
+            <div className="py-12 text-center text-[#9CA3AF]">
+              <RefreshCw className="mx-auto h-6 w-6 animate-spin text-[#3B82F6] mb-2" />
+              Loading connection requests...
+            </div>
+          ) : connections.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[#1F2937] p-12 text-center text-[#9CA3AF]">
+              <Send className="mx-auto h-8 w-8 text-gray-600 mb-2" />
+              <p className="font-semibold text-white">No connection requests yet</p>
+              <p className="text-xs mt-1">Browse approved leads and click "Request Introduction" to connect.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-[#1F2937]">
+              <Table>
+                <TableHeader className="bg-[#0A0A0A]">
+                  <TableRow className="border-[#1F2937]">
+                    <TableHead className="text-white font-semibold">Lead Name</TableHead>
+                    <TableHead className="text-white font-semibold">Domain</TableHead>
+                    <TableHead className="text-white font-semibold">Organisation</TableHead>
+                    <TableHead className="text-white font-semibold">Date Requested</TableHead>
+                    <TableHead className="text-white font-semibold text-right">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {connections.map((c) => {
+                    const status = c.status;
+                    let badgeColor = "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
+                    if (status === "Intro Made") {
+                      badgeColor = "bg-blue-500/15 text-blue-400 border-blue-500/30";
+                    } else if (status === "Connected" || status === "Accepted") {
+                      badgeColor = "bg-green-500/15 text-green-400 border-green-500/30";
+                    } else if (status === "Declined" || status === "Rejected") {
+                      badgeColor = "bg-red-500/15 text-red-400 border-red-500/30";
+                    }
+
+                    return (
+                      <TableRow key={c.id} className="border-[#1F2937] hover:bg-[#161616]">
+                        <TableCell className="font-medium text-white">
+                          {c.lead?.name || `Lead #${c.leadId}`}
+                        </TableCell>
+                        <TableCell className="text-[#9CA3AF]">
+                          {c.lead?.domain || "N/A"}
+                        </TableCell>
+                        <TableCell className="text-[#9CA3AF]">
+                          {c.lead?.organization || "N/A"}
+                        </TableCell>
+                        <TableCell className="text-[#9CA3AF]">
+                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "Recently"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${badgeColor}`}>
+                            {status}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </Card>
       )}
 
       {/* Confirmation Dialog */}

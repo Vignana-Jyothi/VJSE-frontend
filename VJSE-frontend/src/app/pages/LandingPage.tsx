@@ -57,16 +57,11 @@ export function LandingPage() {
           <div className="space-y-6">
             <p className="text-sm uppercase tracking-[0.3em] text-[#3B82F6]/80">VJ Network</p>
             <h1 className="max-w-3xl text-4xl font-extrabold text-white sm:text-5xl">
-              Your College's Professional Network
+              YOUR COLLEGE'S STARTUP NETWORK
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-[#D1D5DB]">
-              Connect with industry leaders referred by fellow students. Built for VNRVJIET startup founders.
+              Accelerate your startups with student-powered leads. Gain direct access to market opportunities and expert mentorship. Browse our active network of startups and log in to access tailored workflows for your role in the ecosystem.
             </p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <p className="text-base text-[#D1D5DB] sm:max-w-xl">
-                Explore the network, read about active startups, and sign in to access role-based workflows for students, mentors, volunteers, and admins.
-              </p>
-            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <Card className="rounded-[20px] border border-[#1F2937] bg-[#141414] p-6 text-white shadow-sm">
