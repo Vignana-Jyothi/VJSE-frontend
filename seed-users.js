@@ -64,7 +64,7 @@ async function seed() {
       name: "Shubham",
       email: "shubham202098@gmail.com",
       password: "VJSEeco@2026",
-      role: "Admin"
+      role: "Mentor"
     },
     {
       name: "Akshay Nerella",

@@ -42,7 +42,7 @@ async function seed() {
       { name: "Kabir Mehta", email: "founder@vnrvjiet.in", password: "founder123", role: "Founder" },
       { name: "Suresh Menon", email: "lead@gmail.com", password: "lead123", role: "Mentor" },
       { name: "Karnam Suhaas", email: "karnamsuhaas@gmail.com", password: "VJSEeco@2026", role: "Admin" },
-      { name: "Shubham", email: "shubham202098@gmail.com", password: "VJSEeco@2026", role: "Admin" },
+      { name: "Shubham", email: "shubham202098@gmail.com", password: "VJSEeco@2026", role: "Mentor" },
       { name: "Akshay Nerella", email: "akshaynerella9@gmail.com", password: "VJSEeco@2026", role: "Admin" }
     ];
 
@@ -70,6 +70,7 @@ async function seed() {
       { name: "Divya Patel", email: "divya@patel.com", domain: "RetailTech", organization: "Patel Consulting", skills: "Early Feedback, Advisory", verified: false, status: "Pending" },
       { name: "Kabir Shah", email: "kabir@farmchain.com", domain: "AgriTech", organization: "FarmChain", skills: "Pilot Partnership, Advisory", verified: true, status: "Approved" },
       { name: "Neelam Gupta", email: "neelam@bits.ac.in", domain: "EdTech", organization: "BITS Pilani", skills: "Advisory, Early Feedback", verified: true, status: "Approved" },
+      { name: "Shubham", email: "shubham202098@gmail.com", domain: "Tech / AI", organization: "VJ Network", skills: "Advisory, Technical Mentorship", verified: true, status: "Approved" },
       { name: "Amit Desai", email: "amit@google.com", domain: "FinTech", organization: "Google India", skills: "Pilot Partnership, Advisory", verified: false, status: "Pending" }
     ];
 

@@ -28,6 +28,7 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [roleSuccessId, setRoleSuccessId] = useState<number | null>(null);
+  const [viewLeadsUserId, setViewLeadsUserId] = useState<number | null>(null);
 
   useEffect(() => {
     if (user && user.role === "Admin") {
@@ -148,6 +149,30 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
     }
   }
 
+  async function handleBlockSourcer(userId: number) {
+    const confirmed = window.confirm("Block this sourcer? They will be prevented from logging in.");
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/users/${userId}/blacklist`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blocked: true }),
+      });
+      if (res.ok) {
+        await fetchAdminData();
+      } else {
+        setError("Failed to block sourcer.");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Error blocking sourcer.");
+    }
+  }
+
+  function getSourcerLeadCount(userId: number) {
+    return leads.filter((l: any) => l.sourcerId === userId).length;
+  }
+
   async function confirmKickUser() {
     if (!selectedUserId) return;
     try {
@@ -166,6 +191,10 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
       setSelectedUserId(null);
     }
   }
+
+  const flaggedSourcers = useMemo(() => {
+    return usersList.filter((u: any) => (u.rejectionCount ?? 0) >= 5 && !u.isBlocked);
+  }, [usersList]);
 
   const filteredUsers = useMemo(() => {
     return usersList.filter((u) => {
@@ -499,6 +528,79 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
           </TabsContent>
 
           <TabsContent value="access" className="space-y-6">
+            {/* --- Flagged Sourcers Section --- */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-bold text-white uppercase tracking-widest">🚩 Flagged Sourcers</h2>
+                <span className="text-xs text-[#9CA3AF] font-medium">(5+ rejections from leads)</span>
+              </div>
+              {flaggedSourcers.length === 0 ? (
+                <div className="rounded-xl border border-green-800/40 bg-green-950/20 px-5 py-4 text-sm text-green-400 flex items-center gap-2">
+                  <span>✅</span>
+                  <span>All sourcers are within acceptable limits.</span>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {flaggedSourcers.map((u: any) => (
+                    <div
+                      key={u.id}
+                      className="rounded-[20px] border border-red-700/60 bg-red-950/20 p-5 space-y-3 shadow-lg shadow-red-950/20"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-white text-sm leading-tight">{u.name}</p>
+                          <p className="text-xs text-[#9CA3AF] break-all">{u.email}</p>
+                        </div>
+                        <span className="shrink-0 inline-flex items-center rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                          {u.rejectionCount} rejections
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#9CA3AF]">
+                        Leads submitted:{" "}
+                        <span className="font-semibold text-white">{getSourcerLeadCount(u.id)}</span>
+                      </p>
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setViewLeadsUserId(viewLeadsUserId === u.id ? null : u.id)}
+                          className="text-xs border-[#3B82F6] text-[#3B82F6] hover:bg-[#1D4ED8]/10 rounded-lg flex-1"
+                        >
+                          {viewLeadsUserId === u.id ? "Hide Leads" : "View Leads"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBlockSourcer(u.id)}
+                          className="text-xs bg-red-700 hover:bg-red-800 text-white rounded-lg flex-1 font-semibold"
+                        >
+                          Block Sourcer
+                        </Button>
+                      </div>
+                      {/* Inline lead list for this sourcer */}
+                      {viewLeadsUserId === u.id && (
+                        <div className="border-t border-red-800/30 pt-3 space-y-2">
+                          {leads.filter((l: any) => l.sourcerId === u.id).length === 0 ? (
+                            <p className="text-xs text-[#9CA3AF]">No leads found for this sourcer.</p>
+                          ) : (
+                            leads.filter((l: any) => l.sourcerId === u.id).map((l: any) => (
+                              <div key={l.id} className="rounded-lg bg-[#0A0A0A] border border-[#1F2937] px-3 py-2">
+                                <p className="text-xs font-semibold text-white">{l.name}</p>
+                                <p className="text-[10px] text-[#9CA3AF]">{l.organization} · {l.domain}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-[#1F2937]" />
+
+            {/* --- Full User List --- */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <input
                 type="text"

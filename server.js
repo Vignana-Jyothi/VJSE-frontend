@@ -9,7 +9,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const { OAuth2Client } = require('google-auth-library');
-const { sendLeadInviteEmail, sendSourcerNotificationEmail, sendWelcomeEmail } = require('./mailer');
+const { sendLeadInviteEmail, sendSourcerNotificationEmail, sendWelcomeEmail, sendLeadPlatformInviteEmail } = require('./mailer');
 
 const Database = require('better-sqlite3');
 
@@ -303,6 +303,11 @@ app.post('/auth/google', authLimiter, async (req, res) => {
       }
     }
 
+    // Fix 4 — Block suspended users before session creation
+    if (user.isBlocked) {
+      return res.status(403).json({ error: 'Your account has been suspended. Please contact the VJ Startups team.' });
+    }
+
     // Save user details to the session
     req.session.user = {
       id: user.id,
@@ -436,7 +441,6 @@ app.post('/api/login', authLimiter, async (req, res) => {
         if (
           normalized === 'karnamsuhaas@gmail.com' ||
           normalized === 'suhaaskarnam@gmail.com' ||
-          normalized === 'shubham202098@gmail.com' ||
           normalized === 'akshaynerella9@gmail.com'
         ) {
           resolvedRole = 'Admin';
@@ -500,7 +504,12 @@ app.get('/api/leads', requireAuth, async (req, res) => {
 
     const leads = await prisma.lead.findMany({
       where,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      include: {
+        sourcer: {
+          select: { id: true, name: true, rejectionCount: true }
+        }
+      }
     });
 
     res.json(leads);
@@ -829,25 +838,27 @@ app.patch('/api/users/:id/role', requireRole('Admin'), async (req, res) => {
 });
 
 // PATCH /api/users/:id/blacklist - Blacklist or un-blacklist user
+// Fix 3 — Accepts both `blocked` (from flagged sourcer UI) and `isBlocked` (from main user table)
 app.patch('/api/users/:id/blacklist', requireRole('Admin'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { isBlocked } = req.body;
+    // Accept either `blocked` or `isBlocked` for flexibility
+    const blockedValue = req.body.blocked !== undefined ? req.body.blocked : req.body.isBlocked;
 
-    if (isNaN(id) || isBlocked === undefined) {
-      return res.status(400).json({ error: "Invalid parameters." });
+    if (isNaN(id) || blockedValue === undefined) {
+      return res.status(400).json({ error: "Invalid parameters. 'blocked' field is required." });
     }
 
     const updatedUser = await prisma.user.update({
       where: { id },
-      data: { isBlocked: Boolean(isBlocked) }
+      data: { isBlocked: Boolean(blockedValue) }
     });
 
-    console.log(`Updated user ${updatedUser.name} blacklist status to ${isBlocked}`);
-    res.json(updatedUser);
+    console.log(`Updated user ${updatedUser.name} blocked status to: ${Boolean(blockedValue)}`);
+    res.json({ user: updatedUser });
   } catch (error) {
     console.error("Error updating user blacklist status:", error);
-    res.status(500).json({ error: "Failed to update user blacklist status" });
+    res.status(500).json({ error: "Failed to update blocked status" });
   }
 });
 
@@ -891,6 +902,44 @@ app.patch('/api/connections/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Error updating connection status:", error);
     res.status(500).json({ error: "Failed to update connection status" });
+  }
+});
+
+// POST /api/connection-requests/:id/respond - Respond (Accept/Decline) to a connection request for a mentor
+app.post('/api/connection-requests/:id/respond', requireRole('Mentor'), async (req, res) => {
+  try {
+    const connId = parseInt(req.params.id);
+    const { action } = req.body; // 'Accept' or 'Decline'
+
+    if (isNaN(connId) || !['Accept', 'Decline'].includes(action)) {
+      return res.status(400).json({ error: "Invalid connection ID or action" });
+    }
+
+    const conn = await prisma.connectionRequest.findUnique({
+      where: { id: connId },
+      include: { lead: true }
+    });
+
+    if (!conn) {
+      return res.status(404).json({ error: "Connection request not found" });
+    }
+
+    // Verify current mentor owns the lead record
+    if (conn.lead.email.toLowerCase() !== req.session.user.email.toLowerCase()) {
+      return res.status(403).json({ error: "You are not authorized to respond to this request" });
+    }
+
+    const newStatus = action === 'Accept' ? 'Accepted' : 'Declined';
+    const updated = await prisma.connectionRequest.update({
+      where: { id: connId },
+      data: { status: newStatus }
+    });
+
+    console.log(`Mentor ${req.session.user.email} ${action}ed connection request #${connId}`);
+    res.json(updated);
+  } catch (error) {
+    console.error("Error responding to connection request:", error);
+    res.status(500).json({ error: "Failed to respond to connection request" });
   }
 });
 
@@ -1053,11 +1102,12 @@ app.post('/api/leads/:id/invite', requireRole('Admin', 'Volunteer'), emailLimite
       return res.status(400).json({ error: "Only approved leads can be invited" });
     }
 
-    // Simulate sending email invitation
-    console.log(`\n✉️  [EMAIL INVITE SENT]`);
-    console.log(`To: ${lead.name} <${lead.email}>`);
-    console.log(`Subject: Invitation to join VJ Startups Platform`);
-    console.log(`Body: Hello ${lead.name},\nWe are pleased to invite you to join the VJ Startups Platform as an approved mentor/lead for ${lead.domain}. Register today to connect with active student founders!\n`);
+    // Send the actual email invitation
+    await sendLeadPlatformInviteEmail({
+      leadEmail: lead.email,
+      leadName: lead.name,
+      domain: lead.domain || 'your domain'
+    });
 
     const updated = await prisma.lead.update({
       where: { id },

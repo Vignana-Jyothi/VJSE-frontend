@@ -34,6 +34,8 @@ interface Lead {
   rejectionReason: string;
   invited: boolean;
   createdAt: string;
+  sourcerId?: number | null;
+  sourcer?: { id: number; name: string; rejectionCount: number } | null;
 }
 
 export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
@@ -245,6 +247,17 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
                   <p className="text-sm text-[#9CA3AF]">
                     Organization: <span className="text-white font-medium">{lead.organization}</span> • Contact: <span className="text-white font-medium">{lead.email}</span>
                   </p>
+                  {/* Sourcer info with High Rejection Rate badge */}
+                  {lead.sourcer && (
+                    <p className="text-xs text-[#9CA3AF] flex items-center gap-2 flex-wrap">
+                      Sourced by: <span className="text-white font-medium">{lead.sourcer.name}</span>
+                      {lead.sourcer.rejectionCount >= 5 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 border border-orange-500/40 px-2 py-0.5 text-[10px] font-bold text-orange-400 uppercase tracking-wide">
+                          ⚠ High Rejection Rate
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex gap-2 shrink-0">

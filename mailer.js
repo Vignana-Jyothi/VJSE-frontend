@@ -164,5 +164,46 @@ async function sendWelcomeEmail({ leadEmail, leadName, founderName, startupName 
   await transporter.sendMail(mailOptions);
   console.log(`✉️ Welcome email sent to lead: ${leadEmail}`);
 }
+// Email 4 — Sent to LEAD when a volunteer approves and invites them to the platform
+async function sendLeadPlatformInviteEmail({ leadEmail, leadName, domain }) {
+  const signupLink = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-module.exports = { sendLeadInviteEmail, sendSourcerNotificationEmail, sendWelcomeEmail };
+  const mailOptions = {
+    from: `"VJ Startups" <${process.env.EMAIL_FROM}>`,
+    to: leadEmail,
+    subject: `Invitation to join VJ Startups Platform`,
+    html: `
+      <div style="font-family: Georgia, serif; max-width: 620px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #111827; font-size: 22px; margin-bottom: 4px;">VJ Startups</h2>
+        <p style="color: #6B7280; font-size: 13px; margin-top: 0;">Startup Support Ecosystem — VJ College</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+
+        <p style="font-size: 15px; color: #111827;">Dear ${leadName},</p>
+
+        <p style="font-size: 15px; color: #374151; line-height: 1.7;">
+          We are pleased to invite you to join the VJ Startups Platform as an approved mentor/lead for <strong>${domain}</strong>.
+        </p>
+
+        <p style="font-size: 15px; color: #374151; line-height: 1.7;">
+          Register today to connect with active student founders and help shape the next generation of startups!
+        </p>
+
+        <div style="margin: 32px 0; text-align: center;">
+          <a href="${signupLink}" style="display: inline-block; background-color: #1D9E75; color: white; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-size: 15px; font-weight: bold;">
+            Join VJ Startups Platform
+          </a>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #9CA3AF;">
+          VJ Startups — Startup Support Ecosystem, VJ College
+        </p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+  console.log(`✉️ Platform invite email sent to lead: ${leadEmail}`);
+}
+
+module.exports = { sendLeadInviteEmail, sendSourcerNotificationEmail, sendWelcomeEmail, sendLeadPlatformInviteEmail };
