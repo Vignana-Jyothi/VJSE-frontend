@@ -138,6 +138,8 @@ The platform primarily uses Google OAuth 2.0 alongside a traditional Email/Passw
 | GET | `/api/connections` | Yes | - | Fetches connections relevant to the user. | Array of reqs |
 | PATCH | `/api/connections/:id` | Yes | Admin | Updates connection status. | Updated req |
 | GET | `/api/invite/respond` | No | - | Processes Lead email "Yes/No" click. | HTML page |
+| GET | `/api/invite/sourcer-respond` | No | - | Processes Sourcer email "Yes/No" click. | HTML page |
+| GET | `/api/notifications/sourcer-declined` | Yes | Admin/Vol | Polls for sourcer declined notifications. | Array of reqs |
 | POST | `/api/leads/:id/invite` | Yes | Admin/Vol | Dispatches platform invite email. | Success msg |
 
 ---
@@ -147,9 +149,10 @@ The platform primarily uses Google OAuth 2.0 alongside a traditional Email/Passw
 The email system is powered by `nodemailer` (`mailer.js`), authenticating via a Gmail App Password.
 
 ### Key Email Flows
-1. **sendLeadInviteEmail**: When a Founder requests an introduction, an email goes to the Lead asking for explicit consent. It includes unique "Yes" and "No" links pointing to `/api/invite/respond?token=...`.
-2. **sendSourcerNotificationEmail**: If the Lead clicks "Yes", an email is automatically dispatched to the Student sourcer, asking them to draft the warm introduction email bridging the Founder and the Lead.
-3. **sendWelcomeEmail**: Sent to the Lead confirming their opt-in and providing a link to the platform.
+1. **sendSourcerIntroRequestEmail**: When a Founder requests an intro, an email goes to the SOURCER first asking if they are comfortable making the intro. It includes "Yes" and "No" links to `/api/invite/sourcer-respond`.
+2. **sendLeadInviteEmail**: If the Sourcer clicks "Yes", an email is sent to the MENTOR with the Sourcer's name prominent as the introducer.
+3. **sendSourcerNotificationEmail**: Sent to the Sourcer notifying them that the intro request was forwarded to the mentor.
+4. **sendWelcomeEmail**: Sent to the Mentor confirming connection and providing next steps.
 
 **Note on `APP_BASE_URL`**: It is critical that `APP_BASE_URL` is set correctly in production. If missing, email links will default to `http://localhost:3000`, which will fail when clicked by external users.
 
