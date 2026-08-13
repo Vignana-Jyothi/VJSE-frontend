@@ -55,7 +55,7 @@ export function LandingPage() {
       <section className="rounded-[28px] border border-[#1F2937] bg-[#111111] p-8 shadow-xl sm:p-12">
         <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div className="space-y-6">
-            <p className="text-sm uppercase tracking-[0.3em] text-[#3B82F6]/80">VJ Network</p>
+            <p className="text-sm uppercase tracking-[0.3em] text-[#3B82F6]/80">VJ STARTUPS LAUNCHPAD</p>
             <h1 className="max-w-3xl text-4xl font-extrabold text-white sm:text-5xl">
               YOUR COLLEGE'S STARTUP NETWORK
             </h1>

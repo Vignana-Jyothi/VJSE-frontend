@@ -314,7 +314,8 @@ app.post('/auth/google', authLimiter, async (req, res) => {
       name: user.name,
       fullName: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      profileCompleted: Boolean(user.profileCompleted)
     };
 
     res.json({ user: req.session.user });
@@ -479,10 +480,11 @@ app.post('/api/login', authLimiter, async (req, res) => {
       name: user.name,
       fullName: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      profileCompleted: Boolean(user.profileCompleted)
     };
 
-    console.log(`User logged in: ${user.name} (${user.role})`);
+    console.log(`User logged in: ${user.name} (${user.role}) - profileCompleted: ${Boolean(user.profileCompleted)}`);
     res.json({ user: req.session.user });
   } catch (error) {
     console.error("Error logging in:", error);
@@ -494,10 +496,20 @@ app.post('/api/login', authLimiter, async (req, res) => {
 app.post('/api/users/complete-profile', requireAuth, async (req, res) => {
   try {
     const { phone, year, branch } = req.body;
-    const userId = req.session.user.id;
+    const userId = req.session?.user?.id || req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required. Please log in again.' });
+    }
 
     if (!phone || !year || !branch) {
-      return res.status(400).json({ error: 'Phone, year, and branch are required' });
+      return res.status(400).json({ error: 'Phone, year, and branch are required.' });
+    }
+
+    // Phone validation
+    const digitsOnly = phone.replace(/\D/g, '');
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit phone number.' });
     }
 
     const updatedUser = await prisma.user.update({
@@ -510,19 +522,27 @@ app.post('/api/users/complete-profile', requireAuth, async (req, res) => {
       }
     });
 
-    req.session.user = {
+    const sessionPayload = {
       id: updatedUser.id,
       name: updatedUser.name,
+      fullName: updatedUser.name,
       email: updatedUser.email,
       role: updatedUser.role,
-      profileCompleted: updatedUser.profileCompleted
+      profileCompleted: true
     };
 
-    console.log(`Profile completed for user: ${updatedUser.name}`);
-    res.json({ user: req.session.user });
+    if (req.session) {
+      req.session.user = sessionPayload;
+    }
+    if (req.user) {
+      req.user = { ...req.user, ...sessionPayload };
+    }
+
+    console.log(`Profile completed for user: ${updatedUser.name} (${updatedUser.email})`);
+    res.json({ message: 'Profile completed successfully', user: sessionPayload });
   } catch (error) {
     console.error('Error completing profile:', error);
-    res.status(500).json({ error: 'Failed to complete profile' });
+    res.status(500).json({ error: 'Failed to complete profile. Please try again.' });
   }
 });
 
@@ -544,7 +564,23 @@ app.get('/api/leads', requireAuth, async (req, res) => {
       orderBy: { createdAt: 'desc' },
       include: {
         sourcer: {
-          select: { id: true, name: true, rejectionCount: true }
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            year: true,
+            branch: true,
+            rejectionCount: true,
+            isBlocked: true
+          }
+        },
+        approvedByVolunteer: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
         }
       }
     });

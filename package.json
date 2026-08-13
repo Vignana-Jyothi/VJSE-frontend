@@ -2,7 +2,7 @@
   "scripts": {
     "start": "node server.js",
     "frontend": "npm run dev --prefix VJSE-frontend",
-    "dev": "npx concurrently \"node server.js\" \"npm run dev --prefix VJSE-frontend\""
+    "dev": "npx concurrently \"node --watch server.js\" \"npm run dev --prefix VJSE-frontend\""
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",

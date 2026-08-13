@@ -29,7 +29,7 @@ const defaultUser: AppUser = {
   role: "Founder",
 };
 
-function ProfileCompletionModal({ onComplete }: { onComplete: (phone: string, year: string, branch: string) => Promise<void> }) {
+function ProfileCompletionModal({ onComplete, onLogout }: { onComplete: (phone: string, year: string, branch: string) => Promise<void>; onLogout: () => void }) {
   const [phone, setPhone] = useState("");
   const [year, setYear] = useState("");
   const [branch, setBranch] = useState("");
@@ -42,12 +42,23 @@ function ProfileCompletionModal({ onComplete }: { onComplete: (phone: string, ye
       setError("Please fill in all fields.");
       return;
     }
+    // Phone number validation (must be 10 to 15 digits)
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      setError("Please enter a valid 10-digit phone number.");
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
       await onComplete(phone, year, branch);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || "Failed to complete profile.");
+      if (err.response?.status === 401) {
+        setError("Your session has expired. Please click 'Log Out' below and log in again.");
+      } else {
+        setError(err.response?.data?.error || err.message || "Failed to complete profile. Please try again.");
+      }
       setLoading(false);
     }
   }
@@ -104,31 +115,81 @@ function ProfileCompletionModal({ onComplete }: { onComplete: (phone: string, ye
               required
             >
               <option value="" disabled>Select Branch</option>
-              <option value="CSE">CSE</option>
-              <option value="IT">IT</option>
-              <option value="ECE">ECE</option>
-              <option value="EEE">EEE</option>
-              <option value="ME">ME</option>
-              <option value="CE">CE</option>
-              <option value="Other">Other</option>
+              
+              <optgroup label="CSE & IT" className="bg-[#1F1F1F] text-emerald-400 font-bold">
+                <option value="Computer Science & Engineering (CSE and CSBS)" className="text-white font-normal">
+                  Computer Science & Engineering (CSE and CSBS)
+                </option>
+                <option value="CSE (AI & ML) & IoT and R&AI" className="text-white font-normal">
+                  CSE (AI & ML) & IoT and R&AI
+                </option>
+                <option value="CSE-(CyS,DS) and AI&DS" className="text-white font-normal">
+                  CSE-(CyS,DS) and AI&DS
+                </option>
+                <option value="Information Technology" className="text-white font-normal">
+                  Information Technology
+                </option>
+              </optgroup>
+
+              <optgroup label="Engineering" className="bg-[#1F1F1F] text-emerald-400 font-bold">
+                <option value="Automobile Engineering" className="text-white font-normal">
+                  Automobile Engineering
+                </option>
+                <option value="Biotechnology" className="text-white font-normal">
+                  Biotechnology
+                </option>
+                <option value="Civil Engineering" className="text-white font-normal">
+                  Civil Engineering
+                </option>
+                <option value="Electrical & Electronics Engineering" className="text-white font-normal">
+                  Electrical & Electronics Engineering
+                </option>
+                <option value="Electronics and Communication Engineering (ECE) & Electronics Engineering (VLSI Design and Technology - EVL)" className="text-white font-normal">
+                  Electronics and Communication Engineering (ECE) & Electronics Engineering (VLSI Design and Technology - EVL)
+                </option>
+                <option value="Electronics and Instrumentation Engineering" className="text-white font-normal">
+                  Electronics and Instrumentation Engineering
+                </option>
+                <option value="Mechanical Engineering" className="text-white font-normal">
+                  Mechanical Engineering
+                </option>
+              </optgroup>
+
+              <optgroup label="Other Disciplines" className="bg-[#1F1F1F] text-emerald-400 font-bold">
+                <option value="Sciences & Humanities" className="text-white font-normal">
+                  Sciences & Humanities
+                </option>
+                <option value="Other" className="text-white font-normal">
+                  Other
+                </option>
+              </optgroup>
             </select>
           </div>
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full mt-6 rounded bg-emerald-600 px-4 py-2.5 font-bold text-white hover:bg-emerald-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Saving...
-              </>
-            ) : "Submit"}
-          </button>
+          <div className="flex items-center gap-3 mt-6">
+            <button 
+              type="button"
+              onClick={onLogout}
+              className="w-1/3 rounded border border-white/20 bg-transparent px-4 py-2.5 font-semibold text-white hover:bg-white/10 transition text-sm"
+            >
+              Log Out
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-2/3 rounded bg-emerald-600 px-4 py-2.5 font-bold text-white hover:bg-emerald-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition text-sm"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Saving...
+                </>
+              ) : "Submit"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -157,7 +218,7 @@ export default function App() {
             fullName: userPayload.fullName || userPayload.name || "VJ User",
             email: userPayload.email,
             role: userPayload.role || "Student",
-            profileCompleted: userPayload.profileCompleted,
+            profileCompleted: Boolean(userPayload.profileCompleted),
           });
         }
       } catch (err) {
@@ -191,7 +252,7 @@ export default function App() {
         fullName: (loginData as any).fullName || loginData.name || "VJ User",
         email: loginData.email,
         role: loginData.role,
-        profileCompleted: (loginData as any).profileCompleted,
+        profileCompleted: Boolean((loginData as any).profileCompleted),
       });
     }
   }
@@ -258,7 +319,7 @@ export default function App() {
         {toastMessage ? <Toast message={toastMessage} /> : null}
         
         {user && user.profileCompleted === false && ['Student', 'Founder', 'Volunteer'].includes(user.role) && (
-          <ProfileCompletionModal onComplete={handleProfileComplete} />
+          <ProfileCompletionModal onComplete={handleProfileComplete} onLogout={handleLogout} />
         )}
       </div>
     </BrowserRouter>

@@ -113,10 +113,10 @@ The platform primarily uses Google OAuth 2.0 alongside a traditional Email/Passw
 | Method | Path | Auth Req? | Role Req? | Description | Returns |
 |--------|------|-----------|-----------|-------------|---------|
 | GET | `/api/config` | No | - | Exposes Google Client ID safely. | JSON config |
-| POST | `/auth/google` | No | - | Verifies Google token, signs in/creates user. | User session |
-| GET | `/check-auth` | Yes | - | Validates active session & fetches fresh user data. | User object |
+| POST | `/auth/google` | No | - | Verifies Google token, signs in/creates user. | User session (incl profileCompleted) |
+| GET | `/check-auth` | Yes | - | Validates active session & fetches fresh user data. | User object (incl profileCompleted) |
 | POST | `/logout` | No | - | Destroys the active session cookie. | Success msg |
-| POST | `/api/login` | No | - | Email/password login and auto-signup. | User session |
+| POST | `/api/login` | No | - | Email/password login and auto-signup. | User session (incl profileCompleted) |
 | GET | `/api/users` | Yes | Admin | Fetches all users for the Admin panel. | Array of users|
 | PATCH | `/api/users/:id/role` | Yes | Admin | Updates a user's role. | Updated user |
 | PATCH | `/api/users/:id/blacklist` | Yes | Admin | Blocks or unblocks a user. | Updated user |
@@ -124,7 +124,7 @@ The platform primarily uses Google OAuth 2.0 alongside a traditional Email/Passw
 ### Leads Routes
 | Method | Path | Auth Req? | Role Req? | Description | Returns |
 |--------|------|-----------|-----------|-------------|---------|
-| GET | `/api/leads` | Yes | - | Fetches all leads (includes sourcer info). | Array of leads |
+| GET | `/api/leads` | Yes | - | Fetches all leads (includes full sourcer & volunteer approval info). | Array of leads |
 | POST | `/api/leads` | Yes | - | Submits a new lead to the database. | Created lead |
 | PATCH | `/api/leads/:id/verify` | Yes | Admin | Toggles verified status. | Updated lead |
 | DELETE| `/api/leads/:id` | Yes | Admin | Deletes a lead permanently. | Success msg |
@@ -177,7 +177,8 @@ The frontend is a Vite-powered React SPA using `react-router-dom` for navigation
 - **Session State**: Maintained in `App.tsx` via a top-level `user` state. `useEffect` calls `/check-auth` on mount to rehydrate the session.
 - **Role-Based Views**: The router explicitly maps users to specific dashboards based on their role (`AdminPage`, `FounderPage`, `VolunteerPage`). If a user attempts to view a page they lack permissions for, the component renders a `LoginGate` or "Access Restricted" message.
 - **Real-time UX**: Dialog modals are used for destructive actions (like blocking a user or deleting a lead). Success badges and optimistic UI updates are used to make the application feel responsive.
-- **Profile Enforcements**: `ProfileCompletionModal` intercepts `App.tsx` rendering for logged-in students and founders who haven't completed their profile, blocking navigation until they submit their `phone`, `year`, and `branch`.
+- **Branding & Assets**: Rebranded platform title to `VJ STARTUPS LAUNCHPAD` and subtitle to `VJ STARTUPS ECOSYSTEM`, updating `index.html` title & favicon and `TopNav.tsx` headers with the custom rocket logo.
+- **Profile Enforcements**: `ProfileCompletionModal` intercepts `App.tsx` rendering for logged-in students, founders, and volunteers who haven't completed their profile, enforcing structured branch selection via grouped optgroups (CSE & IT, Engineering, Sciences & Humanities), validating phone number formats (10-15 digits), and blocking navigation until submitted (with an explicit Log Out option).
 - **Advanced Dashboard Views**:
   - **Volunteer Dashboard**: Features a 60-second polling slide-in panel for `sourcer-declined` notifications and an expandable timeline on leads to show a detailed history of connection request emails and interactions.
   - **Admin Dashboard**: Extends the timeline view to highlight flagged sourcers (high rejection rates) and includes a quick-filter to isolate leads submitted by specific sourcers.

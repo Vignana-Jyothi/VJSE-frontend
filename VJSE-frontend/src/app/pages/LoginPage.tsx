@@ -190,7 +190,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     <div className="mx-auto max-w-md space-y-8 px-4 py-12">
       <div className="space-y-4 text-center text-white">
         <p className="text-sm uppercase tracking-[0.3em] text-[#3B82F6]/80">Secure Login Gate</p>
-        <h1 className="text-4xl font-semibold sm:text-5xl">Access VJ Network</h1>
+        <h1 className="text-4xl font-semibold sm:text-5xl">Access VJ STARTUPS LAUNCHPAD</h1>
       </div>
 
       <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-8 shadow-2xl">
