@@ -719,14 +719,17 @@ app.get('/api/approved-leads', requireAuth, async (req, res) => {
 });
 
 
-// GET /api/connections - Retrieve connections (optionally filtered by userId)
+// GET /api/connections - Retrieve connections (optionally filtered by userId or leadId)
 app.get('/api/connections', requireAuth, async (req, res) => {
   try {
-    const { userId } = req.query;
+    const { userId, leadId } = req.query;
     
     const where = {};
     if (userId) {
       where.userId = parseInt(userId);
+    }
+    if (leadId) {
+      where.leadId = parseInt(leadId);
     }
 
     const connections = await prisma.connectionRequest.findMany({

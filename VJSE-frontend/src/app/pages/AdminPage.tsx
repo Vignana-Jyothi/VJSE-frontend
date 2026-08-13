@@ -7,6 +7,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Switch } from "../components/ui/switch";
 import { LoginGate } from "../components/LoginGate";
 import { domainOptions } from "../data/network";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 
 interface AdminPageProps {
   user: { id: number; fullName: string; email: string; role: string } | null;
@@ -15,6 +16,7 @@ interface AdminPageProps {
 }
 
 export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
+  const [activeTab, setActiveTab] = useState("all");
   const [leads, setLeads] = useState<any[]>([]);
   const [introRequests, setIntroRequests] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -25,10 +27,12 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterRole, setFilterRole] = useState("All");
   const [filterBlacklist, setFilterBlacklist] = useState("All");
+  const [filterSourcerId, setFilterSourcerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [roleSuccessId, setRoleSuccessId] = useState<number | null>(null);
   const [viewLeadsUserId, setViewLeadsUserId] = useState<number | null>(null);
+  const [expandedRequestId, setExpandedRequestId] = useState<number | null>(null);
 
   useEffect(() => {
     if (user && user.role === "Admin") {
@@ -60,7 +64,14 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
         leadOrg: c.lead?.organization || "",
         timestamp: new Date(c.createdAt).toLocaleDateString(),
         status: c.status,
-        handled: c.status !== "Pending"
+        handled: c.status !== "Pending",
+        sourcer: c.lead?.sourcer || null,
+        approvedByVolunteer: c.lead?.approvedByVolunteer || null,
+        approvedAt: c.lead?.approvedAt || null,
+        leadCreatedAt: c.lead?.createdAt || null,
+        sourcerResponse: c.sourcerResponse,
+        sourcerRespondedAt: c.sourcerRespondedAt,
+        mentorNotifiedAt: c.mentorNotifiedAt,
       }));
       setIntroRequests(mappedRequests);
 
@@ -128,24 +139,6 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
     } catch (err) {
       console.error(err);
       setError("Error changing user role.");
-    }
-  }
-
-  async function handleBlacklistToggle(userId: number, currentBlocked: boolean) {
-    try {
-      const res = await fetch(`/api/users/${userId}/blacklist`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isBlocked: !currentBlocked }),
-      });
-      if (res.ok) {
-        await fetchAdminData();
-      } else {
-        setError("Failed to update user blacklist status.");
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Error toggling blacklist status.");
     }
   }
 
@@ -224,9 +217,10 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
           : filterStatus === "Verified"
             ? lead.verified
             : !lead.verified;
-      return domainMatch && statusMatch;
+      const sourcerMatch = filterSourcerId ? lead.sourcerId === filterSourcerId : true;
+      return domainMatch && statusMatch && sourcerMatch;
     });
-  }, [filterDomain, filterStatus, leads]);
+  }, [filterDomain, filterStatus, leads, filterSourcerId]);
 
   const activeRequests = introRequests.filter((request) => !request.handled);
 
@@ -349,34 +343,20 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
-          <p className="text-sm uppercase tracking-[0.28em] text-[#9CA3AF]">Total Leads</p>
-          <p className="mt-4 text-3xl font-semibold text-[#3B82F6]">{leads.length}</p>
-        </Card>
-        <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
-          <p className="text-sm uppercase tracking-[0.28em] text-[#9CA3AF]">Verified</p>
-          <p className="mt-4 text-3xl font-semibold text-[#22C55E]">{leads.filter((lead) => lead.verified).length}</p>
-        </Card>
-        <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
-          <p className="text-sm uppercase tracking-[0.28em] text-[#9CA3AF]">Pending</p>
-          <p className="mt-4 text-3xl font-semibold text-[#F59E0B]">{leads.filter((lead) => !lead.verified).length}</p>
-        </Card>
-        <Card className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
-          <p className="text-sm uppercase tracking-[0.28em] text-[#9CA3AF]">Introduction Requests</p>
-          <p className="mt-4 text-3xl font-semibold text-[#3B82F6]">{activeRequests.length}</p>
-        </Card>
-      </div>
-
-      <Card className="rounded-[28px] border border-[#1F2937] bg-[#111111] p-6 shadow-xl">
-        <Tabs defaultValue="all">
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <TabsList className="w-full sm:w-auto">
-              <TabsTrigger value="all">All Leads</TabsTrigger>
-              <TabsTrigger value="requests">Introduction Requests</TabsTrigger>
-              <TabsTrigger value="access">Manage Access</TabsTrigger>
-            </TabsList>
-          </div>
+      <Card className="rounded-[32px] border border-[#1F2937] bg-[#111111] p-6 shadow-2xl">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="bg-[#0A0A0A] p-1 border border-[#1F2937]">
+            <TabsTrigger value="all" className="rounded-md data-[state=active]:bg-[#1F2937] data-[state=active]:text-white">
+              All Platform Leads
+            </TabsTrigger>
+            <TabsTrigger value="requests" className="rounded-md data-[state=active]:bg-[#1F2937] data-[state=active]:text-white">
+              Intro Requests ({activeRequests.length})
+            </TabsTrigger>
+            <TabsTrigger value="access" className="rounded-md data-[state=active]:bg-[#1F2937] data-[state=active]:text-white flex items-center gap-2">
+              Manage Access 
+              {flaggedSourcers.length > 0 && <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">{flaggedSourcers.length}</span>}
+            </TabsTrigger>
+          </TabsList>
 
           <TabsContent value="all" className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -405,6 +385,18 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
                 ⬇ Download CSV
               </Button>
             </div>
+
+            {filterSourcerId && (
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-sm text-white bg-[#1F2937] px-3 py-1.5 rounded-full flex items-center gap-2">
+                  Filtering by Sourcer ID: {filterSourcerId}
+                  <button onClick={() => setFilterSourcerId(null)} className="text-red-400 hover:text-red-300">
+                    <X className="h-4 w-4" />
+                  </button>
+                </span>
+              </div>
+            )}
+
             <Table>
               <TableHeader>
                 <TableRow className="text-[#9CA3AF]">
@@ -500,13 +492,26 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
           <TabsContent value="requests">
             <div className="grid gap-4 xl:grid-cols-3">
               {activeRequests.map((request) => (
-                <Card key={request.id} className="rounded-[24px] border border-[#1F2937] bg-[#111111] p-6 shadow-sm">
-                  <div className="space-y-4 text-[#ffffff]">
-                    <div className="space-y-1">
-                      <p className="text-sm uppercase tracking-[0.24em] text-[#9CA3AF]">Requesting founder</p>
-                      <p className="text-lg font-semibold">{request.founder}</p>
-                      <p className="text-sm text-[#9CA3AF]">{request.email}</p>
+                <Card key={request.id} className="rounded-[24px] border border-[#1F2937] bg-[#111111] shadow-sm overflow-hidden">
+                  <div className="p-6 space-y-4 text-[#ffffff]">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <p className="text-sm uppercase tracking-[0.24em] text-[#9CA3AF]">Requesting founder</p>
+                        <p className="text-lg font-semibold">{request.founder}</p>
+                        <p className="text-sm text-[#9CA3AF]">{request.email}</p>
+                      </div>
+                      <button 
+                        onClick={() => setExpandedRequestId(expandedRequestId === request.id ? null : request.id)}
+                        className="text-xs text-[#3B82F6] hover:text-[#60A5FA] flex items-center gap-1 bg-[#3B82F6]/10 px-2 py-1 rounded"
+                      >
+                        {expandedRequestId === request.id ? (
+                          <><ChevronUp className="h-3 w-3" /> Hide Timeline</>
+                        ) : (
+                          <><ChevronDown className="h-3 w-3" /> View Timeline</>
+                        )}
+                      </button>
                     </div>
+                    
                     <div className="rounded-3xl bg-[#121212] p-4 border border-[#1F2937]/50">
                       <p className="text-sm text-[#9CA3AF]">Lead Profile</p>
                       <p className="mt-2 font-semibold text-white">{request.leadName}</p>
@@ -519,10 +524,56 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
                       </Button>
                     </div>
                   </div>
+
+                  {expandedRequestId === request.id && (
+                    <div className="bg-[#0A0A0A] border-t border-[#1F2937] p-6 space-y-6">
+                      <div className="grid md:grid-cols-2 gap-4 text-sm">
+                        <div className="p-4 rounded-lg bg-[#111111] border border-[#1F2937]">
+                          <h4 className="font-semibold text-white mb-2 uppercase tracking-wide text-xs">Sourcer Details</h4>
+                          {request.sourcer ? (
+                            <ul className="space-y-1 text-[#9CA3AF]">
+                              <li><span className="font-medium text-white">{request.sourcer.name}</span></li>
+                              <li>{request.sourcer.email}</li>
+                              <li>{request.sourcer.phone || 'N/A'}</li>
+                              <li>{request.sourcer.year || 'N/A'} - {request.sourcer.branch || 'N/A'}</li>
+                              <li>Rejections: <span className={request.sourcer.rejectionCount >= 5 ? 'text-red-500 font-bold' : ''}>{request.sourcer.rejectionCount}</span></li>
+                              <li>Status: <span className={request.sourcer.isBlocked ? 'text-red-500 font-bold' : 'text-green-500'}>{request.sourcer.isBlocked ? 'Blocked' : 'Active'}</span></li>
+                              <li className="pt-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => {
+                                    setFilterSourcerId(request.sourcer.id);
+                                    setActiveTab("all");
+                                  }}
+                                  className="w-full border-[#3B82F6] text-[#3B82F6] hover:bg-[#3B82F6]/10 text-xs h-7 mt-2"
+                                >
+                                  View All Leads by This Sourcer
+                                </Button>
+                              </li>
+                            </ul>
+                          ) : (
+                            <p className="text-gray-500 italic">No sourcer attached.</p>
+                          )}
+                        </div>
+
+                        <div className="p-4 rounded-lg bg-[#111111] border border-[#1F2937]">
+                          <h4 className="font-semibold text-white mb-2 uppercase tracking-wide text-xs">Timeline</h4>
+                          <ul className="space-y-2 text-[#9CA3AF]">
+                            <li>Submitted: {request.leadCreatedAt ? new Date(request.leadCreatedAt).toLocaleDateString() : 'Unknown'}</li>
+                            <li>Approved by: <span className="font-medium text-white">{request.approvedByVolunteer?.name || 'N/A'}</span></li>
+                            <li>Approved on: {request.approvedAt ? new Date(request.approvedAt).toLocaleDateString() : 'Unknown'}</li>
+                            <li className="pt-2 border-t border-[#1F2937] mt-2">Sourcer Response: <span className="text-white font-semibold capitalize">{request.sourcerResponse || "Not contacted"}</span></li>
+                            <li>Mentor Response: <span className="text-white font-semibold capitalize">{request.status === 'Declined' ? 'Declined' : request.status === 'Intro Made' ? 'Accepted' : (request.mentorNotifiedAt ? 'Pending' : 'Not contacted')}</span></li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </Card>
               ))}
               {activeRequests.length === 0 && (
-                <p className="text-sm text-[#9CA3AF] py-6 w-full text-center">No introduction requests pending right now.</p>
+                <p className="text-sm text-[#9CA3AF] py-6 w-full text-center col-span-full">No introduction requests pending right now.</p>
               )}
             </div>
           </TabsContent>

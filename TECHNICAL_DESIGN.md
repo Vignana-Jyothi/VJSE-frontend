@@ -177,6 +177,10 @@ The frontend is a Vite-powered React SPA using `react-router-dom` for navigation
 - **Session State**: Maintained in `App.tsx` via a top-level `user` state. `useEffect` calls `/check-auth` on mount to rehydrate the session.
 - **Role-Based Views**: The router explicitly maps users to specific dashboards based on their role (`AdminPage`, `FounderPage`, `VolunteerPage`). If a user attempts to view a page they lack permissions for, the component renders a `LoginGate` or "Access Restricted" message.
 - **Real-time UX**: Dialog modals are used for destructive actions (like blocking a user or deleting a lead). Success badges and optimistic UI updates are used to make the application feel responsive.
+- **Profile Enforcements**: `ProfileCompletionModal` intercepts `App.tsx` rendering for logged-in students and founders who haven't completed their profile, blocking navigation until they submit their `phone`, `year`, and `branch`.
+- **Advanced Dashboard Views**:
+  - **Volunteer Dashboard**: Features a 60-second polling slide-in panel for `sourcer-declined` notifications and an expandable timeline on leads to show a detailed history of connection request emails and interactions.
+  - **Admin Dashboard**: Extends the timeline view to highlight flagged sourcers (high rejection rates) and includes a quick-filter to isolate leads submitted by specific sourcers.
 
 ---
 
