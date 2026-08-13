@@ -69,14 +69,14 @@ The database schema is defined in `prisma/schema.prisma`.
 ### Models Explained
 
 - **Lead**: Stores information about industry professionals submitted by students. 
-  - Fields: `name`, `email`, `organization`, `skills`, `verified` (Boolean), `status` (Pending/Approved/Rejected), `rejectionReason`. 
+  - Fields: `name`, `email`, `organization`, `skills`, `verified` (Boolean), `status` (Pending/Approved/Rejected), `rejectionReason`, `approvedByVolunteerId`, `approvedAt`. 
   - It also links to the `User` who sourced them via `sourcerId`.
 - **User**: Stores all platform users (Founders, Students, Admins). 
-  - Fields: `email`, `googleId`, `name`, `role`, `rejectionCount` (for flagging sourcers with poor submissions), `isBlocked`.
+  - Fields: `email`, `googleId`, `name`, `role`, `rejectionCount` (for flagging sourcers with poor submissions), `isBlocked`, `phone`, `year`, `branch`, `profileCompleted`.
 - **StartupProfile**: Stores details about a Founder's startup.
   - Linked 1-to-1 with a Founder user.
 - **ConnectionRequest**: Represents a Founder's request to connect with a Lead.
-  - Fields: `status` (Pending/Intro Made/Connected). Links `userId` (Founder) and `leadId`.
+  - Fields: `status` (Pending/Intro Made/Connected), `sourcerResponse`, `sourcerRespondedAt`, `mentorNotifiedAt`, `sourcerInviteToken`. Links `userId` (Founder) and `leadId`.
 - **ChatMessage**: Stores internal chat messages if founders/leads communicate on-platform.
 - **SourcerRejectionLog**: An audit log for tracking whenever a lead submission is rejected or a connection request fails, linked to the sourcer to monitor quality.
 
@@ -219,6 +219,7 @@ The frontend is a Vite-powered React SPA using `react-router-dom` for navigation
 | Security Audit | Added requireAuth/requireRole middleware | Route-level checks | Route-level checks were easily forgotten by junior devs, leading to data leaks. | Centralized, foolproof security for endpoints. |
 | Feature Add | Invite token approach for lead consent | Auto-connecting | Auto-connecting led to spam complaints. Leads must explicitly opt-in. | Improved platform reputation and lead quality. |
 | Feature Add | SourcerRejectionLog as separate table | Counter on User model | A simple counter doesn't tell us *which* leads were rejected or *why*. | Allows detailed auditing of sourcer performance. |
+| Feature Add | Expanded intro flow and user profiles | External tracking | We needed fine-grained timestamps and volunteer approval tracking directly in the DB. | Enables a more detailed tracking of the introduction pipeline. |
 
 ---
 

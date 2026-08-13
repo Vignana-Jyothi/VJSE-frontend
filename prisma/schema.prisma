@@ -33,6 +33,9 @@ model Lead {
   rejectionLogs   SourcerRejectionLog[]
   inviteToken     String?
   inviteAccepted  Boolean                @default(false)
+  approvedByVolunteerId  Int?
+  approvedByVolunteer    User?    @relation("VolunteerApprovals", fields: [approvedByVolunteerId], references: [id])
+  approvedAt             DateTime?
 }
 
 model User {
@@ -50,6 +53,11 @@ model User {
   rejectionCount     Int                    @default(0)
   isBlocked          Boolean                @default(false)
   rejectionLogs      SourcerRejectionLog[]
+  phone              String?
+  year               String?
+  branch             String?
+  profileCompleted   Boolean  @default(false)
+  approvedLeads      Lead[]   @relation("VolunteerApprovals")
 }
 
 model StartupProfile {
@@ -72,6 +80,10 @@ model ConnectionRequest {
   status        String   // "Pending" | "Intro Made" | "Connected"
   createdAt     DateTime @default(now())
   rejectionLogs SourcerRejectionLog[]
+  sourcerResponse      String?
+  sourcerRespondedAt   DateTime?
+  mentorNotifiedAt     DateTime?
+  sourcerInviteToken   String?
 
   @@unique([userId, leadId])
 }
