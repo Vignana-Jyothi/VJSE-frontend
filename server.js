@@ -337,7 +337,8 @@ app.get('/check-auth', async (req, res) => {
           id: freshUser.id,
           name: freshUser.name,
           email: freshUser.email,
-          role: freshUser.role
+          role: freshUser.role,
+          profileCompleted: freshUser.profileCompleted
         };
         return res.json({ user: req.session.user });
       }
@@ -486,6 +487,42 @@ app.post('/api/login', authLimiter, async (req, res) => {
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ error: "An unexpected error occurred during login" });
+  }
+});
+
+// POST /api/users/complete-profile — Student fills in phone, year, branch on first login
+app.post('/api/users/complete-profile', requireAuth, async (req, res) => {
+  try {
+    const { phone, year, branch } = req.body;
+    const userId = req.session.user.id;
+
+    if (!phone || !year || !branch) {
+      return res.status(400).json({ error: 'Phone, year, and branch are required' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        phone: phone.trim(),
+        year: year.trim(),
+        branch: branch.trim(),
+        profileCompleted: true
+      }
+    });
+
+    req.session.user = {
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      profileCompleted: updatedUser.profileCompleted
+    };
+
+    console.log(`Profile completed for user: ${updatedUser.name}`);
+    res.json({ user: req.session.user });
+  } catch (error) {
+    console.error('Error completing profile:', error);
+    res.status(500).json({ error: 'Failed to complete profile' });
   }
 });
 
@@ -694,14 +731,40 @@ app.get('/api/connections', requireAuth, async (req, res) => {
 
     const connections = await prisma.connectionRequest.findMany({
       where,
-      include: { 
+      include: {
         lead: {
           include: {
-            sourcer: true
+            sourcer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                year: true,
+                branch: true,
+                rejectionCount: true,
+                isBlocked: true
+              }
+            },
+            approvedByVolunteer: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
           }
         },
-        user: true // Include Founder details for Admin view
-      }
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     res.json(connections);
@@ -739,45 +802,39 @@ app.post('/api/connections', requireRole('Founder'), emailLimiter, async (req, r
     // Generate invite token and send emails
     try {
       const crypto = require('crypto');
-      const inviteToken = crypto.randomBytes(32).toString('hex');
+      const sourcerInviteToken = crypto.randomBytes(32).toString('hex');
 
-      // Save invite token to lead
-      await prisma.lead.update({
-        where: { id: parseInt(leadId) },
-        data: { inviteToken }
-      });
-
-      // Get lead with sourcer details
       const lead = await prisma.lead.findUnique({
         where: { id: parseInt(leadId) },
-        include: { sourcer: true }
+        include: {
+          sourcer: true,
+          approvedByVolunteer: true
+        }
       });
 
-      // Get founder details
       const founder = await prisma.user.findUnique({
         where: { id: parseInt(userId) }
       });
 
-      // Send email to lead
-      if (lead?.email) {
-        await sendLeadInviteEmail({
-          leadEmail: lead.email,
-          leadName: lead.name,
-          founderName: founder?.name || 'A VJ Startup Founder',
-          startupName: founder?.name || 'VJ Startup',
-          sourcerName: lead.sourcer?.name || 'a VJ student',
-          inviteToken,
-          connectionId: conn.id
-        });
-      }
+      // Save sourcer invite token and set sourcer response to pending
+      await prisma.connectionRequest.update({
+        where: { id: conn.id },
+        data: {
+          sourcerInviteToken,
+          sourcerResponse: 'pending'
+        }
+      });
 
-      // Send notification email to sourcer
+      // Send email to SOURCER first — not mentor
       if (lead?.sourcer?.email) {
-        await sendSourcerNotificationEmail({
+        await sendSourcerIntroRequestEmail({
           sourcerEmail: lead.sourcer.email,
           sourcerName: lead.sourcer.name,
-          leadName: lead.name,
-          founderName: founder?.name || 'A VJ Startup Founder'
+          founderName: founder?.name || 'A VJ Startup Founder',
+          startupName: founder?.name || 'VJ Startup',
+          mentorName: lead.name,
+          sourcerInviteToken,
+          connectionId: conn.id
         });
       }
     } catch (emailErr) {
@@ -1042,8 +1099,10 @@ app.patch('/api/leads/:id/approve', requireRole('Admin', 'Volunteer'), async (re
       where: { id },
       data: {
         verified: true,
-        status: "Approved",
-        rejectionReason: "" // clear rejection reason
+        status: 'Approved',
+        rejectionReason: '',
+        approvedByVolunteerId: req.session.user.id,
+        approvedAt: new Date()
       }
     });
 
@@ -1265,6 +1324,149 @@ app.get('/api/invite/respond', async (req, res) => {
     res.status(500).send('Something went wrong. Please try again later.');
   }
 });
+
+app.get('/api/invite/sourcer-respond', async (req, res) => {
+  try {
+    const { token, response, connectionId } = req.query;
+
+    if (!token || !response || !connectionId) {
+      return res.status(400).send('Invalid link.');
+    }
+
+    const connection = await prisma.connectionRequest.findFirst({
+      where: {
+        id: parseInt(connectionId),
+        sourcerInviteToken: token
+      },
+      include: {
+        user: true,
+        lead: {
+          include: { sourcer: true }
+        }
+      }
+    });
+
+    if (!connection) {
+      return res.status(404).send('This link is invalid or has already been used.');
+    }
+
+    if (response === 'yes') {
+      const crypto = require('crypto');
+      const mentorInviteToken = crypto.randomBytes(32).toString('hex');
+
+      // Update connection — sourcer accepted, now contact mentor
+      await prisma.connectionRequest.update({
+        where: { id: parseInt(connectionId) },
+        data: {
+          sourcerResponse: 'accepted',
+          sourcerRespondedAt: new Date(),
+          sourcerInviteToken: null,
+          status: 'Sourcer Accepted',
+          mentorNotifiedAt: new Date()
+        }
+      });
+
+      // Save mentor invite token to lead
+      await prisma.lead.update({
+        where: { id: connection.lead.id },
+        data: { inviteToken: mentorInviteToken }
+      });
+
+      // Now send email to MENTOR with sourcer name prominent
+      await sendLeadInviteEmail({
+        leadEmail: connection.lead.email,
+        leadName: connection.lead.name,
+        founderName: connection.user?.name || 'A VJ Startup Founder',
+        startupName: connection.user?.name || 'VJ Startup',
+        sourcerName: connection.lead.sourcer?.name || 'a VJ student',
+        inviteToken: mentorInviteToken,
+        connectionId: parseInt(connectionId)
+      });
+
+      return res.send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px;">
+            <h2 style="color: #1D9E75;">Thank you for agreeing to help!</h2>
+            <p>We have now reached out to ${connection.lead.name} on your behalf.</p>
+            <p>We will notify you once they respond.</p>
+            <p style="color: #6B7280; font-size: 14px;">You may close this tab.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    if (response === 'no') {
+      // Update connection — sourcer declined
+      await prisma.connectionRequest.update({
+        where: { id: parseInt(connectionId) },
+        data: {
+          sourcerResponse: 'declined',
+          sourcerRespondedAt: new Date(),
+          sourcerInviteToken: null,
+          status: 'Sourcer Declined'
+        }
+      });
+
+      // Store notification for volunteer dashboard
+      console.log(`SOURCER_DECLINED: connectionId=${connectionId} sourcer=${connection.lead.sourcer?.name} email=${connection.lead.sourcer?.email} phone=${connection.lead.sourcer?.phone} year=${connection.lead.sourcer?.year} branch=${connection.lead.sourcer?.branch}`);
+
+      return res.send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px;">
+            <h2 style="color: #374151;">Thank you for letting us know.</h2>
+            <p>We understand you are not able to help right now. The volunteer team will follow up if needed.</p>
+            <p style="color: #6B7280; font-size: 14px;">You may close this tab.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    return res.status(400).send('Invalid response.');
+  } catch (error) {
+    console.error('Error handling sourcer response:', error);
+    res.status(500).send('Something went wrong. Please try again later.');
+  }
+});
+
+app.get('/api/notifications/sourcer-declined', requireRole('Admin', 'Volunteer'), async (req, res) => {
+  try {
+    const declined = await prisma.connectionRequest.findMany({
+      where: {
+        sourcerResponse: 'declined'
+      },
+      include: {
+        lead: {
+          include: {
+            sourcer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                year: true,
+                branch: true
+              }
+            }
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { sourcerRespondedAt: 'desc' }
+    });
+
+    res.json(declined);
+  } catch (error) {
+    console.error('Error fetching declined notifications:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
 
 // --- GLOBAL ERROR HANDLER (must be after all routes) ---
 app.use((err, req, res, next) => {
