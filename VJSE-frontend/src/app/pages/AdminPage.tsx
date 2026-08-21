@@ -20,6 +20,7 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
   const [leads, setLeads] = useState<any[]>([]);
   const [introRequests, setIntroRequests] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [loginLogs, setLoginLogs] = useState<any[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -80,6 +81,13 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
       if (usersRes.ok) {
         const usersData = await usersRes.json();
         setUsersList(usersData);
+      }
+
+      // 4. Fetch login logs
+      const logsRes = await fetch("/api/logs/logins");
+      if (logsRes.ok) {
+        const logsData = await logsRes.json();
+        setLoginLogs(logsData);
       }
     } catch (err) {
       console.error(err);
@@ -352,9 +360,17 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
             <TabsTrigger value="requests" className="rounded-md data-[state=active]:bg-[#1F2937] data-[state=active]:text-white">
               Intro Requests ({activeRequests.length})
             </TabsTrigger>
-            <TabsTrigger value="access" className="rounded-md data-[state=active]:bg-[#1F2937] data-[state=active]:text-white flex items-center gap-2">
-              Manage Access 
-              {flaggedSourcers.length > 0 && <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">{flaggedSourcers.length}</span>}
+            <TabsTrigger 
+              value="users" 
+              className="rounded-md data-[state=active]:bg-[#1F2937] data-[state=active]:text-white"
+            >
+              Manage Access
+            </TabsTrigger>
+            <TabsTrigger 
+              value="logs" 
+              className="rounded-md data-[state=active]:bg-[#1F2937] data-[state=active]:text-white"
+            >
+              Login Logs
             </TabsTrigger>
           </TabsList>
 
@@ -578,223 +594,149 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="access" className="space-y-6">
-            {/* --- Flagged Sourcers Section --- */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <h2 className="text-base font-bold text-white uppercase tracking-widest">🚩 Flagged Sourcers</h2>
-                <span className="text-xs text-[#9CA3AF] font-medium">(5+ rejections from leads)</span>
-              </div>
-              {flaggedSourcers.length === 0 ? (
-                <div className="rounded-xl border border-green-800/40 bg-green-950/20 px-5 py-4 text-sm text-green-400 flex items-center gap-2">
-                  <span>✅</span>
-                  <span>All sourcers are within acceptable limits.</span>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {flaggedSourcers.map((u: any) => (
-                    <div
-                      key={u.id}
-                      className="rounded-[20px] border border-red-700/60 bg-red-950/20 p-5 space-y-3 shadow-lg shadow-red-950/20"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <p className="font-bold text-white text-sm leading-tight">{u.name}</p>
-                          <p className="text-xs text-[#9CA3AF] break-all">{u.email}</p>
-                        </div>
-                        <span className="shrink-0 inline-flex items-center rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-bold text-white">
-                          {u.rejectionCount} rejections
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#9CA3AF]">
-                        Leads submitted:{" "}
-                        <span className="font-semibold text-white">{getSourcerLeadCount(u.id)}</span>
-                      </p>
-                      <div className="flex gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setViewLeadsUserId(viewLeadsUserId === u.id ? null : u.id)}
-                          className="text-xs border-[#3B82F6] text-[#3B82F6] hover:bg-[#1D4ED8]/10 rounded-lg flex-1"
-                        >
-                          {viewLeadsUserId === u.id ? "Hide Leads" : "View Leads"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleBlockSourcer(u.id)}
-                          className="text-xs bg-red-700 hover:bg-red-800 text-white rounded-lg flex-1 font-semibold"
-                        >
-                          Block Sourcer
-                        </Button>
-                      </div>
-                      {/* Inline lead list for this sourcer */}
-                      {viewLeadsUserId === u.id && (
-                        <div className="border-t border-red-800/30 pt-3 space-y-2">
-                          {leads.filter((l: any) => l.sourcerId === u.id).length === 0 ? (
-                            <p className="text-xs text-[#9CA3AF]">No leads found for this sourcer.</p>
-                          ) : (
-                            leads.filter((l: any) => l.sourcerId === u.id).map((l: any) => (
-                              <div key={l.id} className="rounded-lg bg-[#0A0A0A] border border-[#1F2937] px-3 py-2">
-                                <p className="text-xs font-semibold text-white">{l.name}</p>
-                                <p className="text-[10px] text-[#9CA3AF]">{l.organization} · {l.domain}</p>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-[#1F2937]" />
-
-            {/* --- Full User List --- */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <input
-                type="text"
-                placeholder="Search user by name or email..."
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-                className="w-full max-w-sm rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
-              />
-              <div className="flex flex-wrap items-center gap-3">
-                <select
-                  value={filterRole}
-                  onChange={(e) => setFilterRole(e.target.value)}
-                  className="rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
-                >
-                  <option value="All">All Roles</option>
-                  <option value="Student">Student</option>
-                  <option value="Mentor">Mentor</option>
-                  <option value="Founder">Founder</option>
-                  <option value="Volunteer">Volunteer</option>
-                  <option value="Admin">Admin</option>
-                </select>
-
-                <select
-                  value={filterBlacklist}
-                  onChange={(e) => setFilterBlacklist(e.target.value)}
-                  className="rounded-xl border border-[#27272A] bg-[#0A0A0A] px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B82F6]"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Blacklisted">Blacklisted</option>
-                </select>
-
-                <span className="text-xs text-[#9CA3AF]">
-                  Total: <span className="font-bold text-white">{filteredUsers.length}</span>
-                </span>
-              </div>
-            </div>
-
-            <Table>
-              <TableHeader>
-                <TableRow className="text-[#9CA3AF]">
-                  <TableHead>User Name</TableHead>
-                  <TableHead>Email Address</TableHead>
-                  <TableHead>Current Role</TableHead>
-                  <TableHead>Blacklist Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-6 text-[#9CA3AF]">
-                      No user accounts found matching "{userSearch}".
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredUsers.map((u) => (
-                    <TableRow key={u.id} className="border-b border-[#1F2937]/50">
-                      <TableCell className="text-white font-semibold">{u.name}</TableCell>
-                      <TableCell className="text-[#D1D5DB]">{u.email}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={u.role}
-                            onChange={(e) => handleRoleChange(u, e.target.value)}
-                            className="rounded-lg border border-[#27272A] bg-[#0A0A0A] px-3 py-1.5 text-xs text-white outline-none focus:border-[#3B82F6]"
-                          >
-                            <option value="Student">Student</option>
-                            <option value="Mentor">Mentor</option>
-                            <option value="Founder">Founder</option>
-                            <option value="Volunteer">Volunteer</option>
-                            <option value="Admin">Admin</option>
-                          </select>
-                          {roleSuccessId === u.id && (
-                            <span className="text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5 animate-pulse">
-                              ✓ Updated!
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                          u.isBlocked 
-                            ? "bg-red-500/15 text-red-400 border border-red-500/20" 
-                            : "bg-green-500/15 text-green-400 border border-green-500/20"
-                        }`}>
-                          {u.isBlocked ? "Blacklisted" : "Active"}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleBlacklistToggle(u.id, u.isBlocked)}
-                            className={`text-xs font-semibold rounded-lg ${
-                              u.isBlocked
-                                ? "border-green-600 text-green-400 hover:bg-green-950/30"
-                                : "border-yellow-600 text-yellow-400 hover:bg-yellow-950/30"
-                            }`}
-                          >
-                            {u.isBlocked ? "Un-Blacklist" : "Blacklist"}
-                          </Button>
-
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                className="bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs"
-                                onClick={() => setSelectedUserId(u.id)}
-                              >
-                                Kick / Remove
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="rounded-[32px] bg-[#111111] border border-[#1F2937] p-6 text-white">
-                              <DialogHeader>
-                                <DialogTitle>Kick user account?</DialogTitle>
-                                <DialogDescription className="text-[#9CA3AF]">
-                                  Are you sure you want to remove <span className="text-white font-semibold">{u.name} ({u.email})</span> from the platform?
-                                </DialogDescription>
-                              </DialogHeader>
-                              <DialogFooter className="gap-2 mt-4">
-                                <DialogClose asChild>
-                                  <Button variant="outline" className="border-[#3B82F6] text-[#3B82F6]">
-                                    Cancel
-                                  </Button>
-                                </DialogClose>
-                                <DialogClose asChild>
-                                  <Button variant="destructive" onClick={confirmKickUser}>
-                                    Kick Account
-                                  </Button>
-                                </DialogClose>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      </TableCell>
+          <TabsContent value="users" className="mt-0">
+            <Card className="border border-[#1F2937] bg-[#111111]">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="border-b border-[#1F2937] bg-[#0A0A0A]/50">
+                    <TableRow className="border-none hover:bg-transparent">
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">Name</TableHead>
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">Email</TableHead>
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">Role</TableHead>
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">Status</TableHead>
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">Rejections</TableHead>
+                      <TableHead className="text-right text-xs font-semibold text-[#6B7280]">Actions</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.length > 0 ? (
+                      filteredUsers.map((u) => (
+                        <TableRow key={u.id} className="border-b border-[#1F2937]/50 hover:bg-[#1F2937]/20">
+                          <TableCell className="font-medium text-white">{u.name}</TableCell>
+                          <TableCell className="text-[#D1D5DB]">{u.email}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={u.role}
+                                onChange={(e) => handleRoleChange(u, e.target.value)}
+                                className="rounded-lg border border-[#27272A] bg-[#0A0A0A] px-3 py-1.5 text-xs text-white outline-none focus:border-[#3B82F6]"
+                              >
+                                <option value="Student">Student</option>
+                                <option value="Mentor">Mentor</option>
+                                <option value="Founder">Founder</option>
+                                <option value="Volunteer">Volunteer</option>
+                                <option value="Admin">Admin</option>
+                              </select>
+                              {roleSuccessId === u.id && (
+                                <span className="text-xs text-green-500">Updated</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {u.isBlocked ? (
+                              <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-1 text-xs font-medium text-red-500 ring-1 ring-inset ring-red-500/20">
+                                Blocked
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500 ring-1 ring-inset ring-emerald-500/20">
+                                Active
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`text-sm ${u.rejectionCount >= 5 ? 'font-bold text-red-400' : 'text-[#9CA3AF]'}`}>
+                              {u.rejectionCount || 0}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {u.id !== user?.id && (
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    onClick={() => setSelectedUserId(u.id)}
+                                    className="h-8 rounded-lg text-red-400 hover:bg-red-950/30 hover:text-red-300"
+                                  >
+                                    Kick User
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="border-[#27272A] bg-[#0A0A0A] sm:max-w-[425px]">
+                                  <DialogHeader>
+                                    <DialogTitle className="text-white">Kick User</DialogTitle>
+                                    <DialogDescription className="text-[#9CA3AF]">
+                                      Are you sure you want to permanently delete this user?
+                                      They will lose all access to the platform. This action cannot be undone.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <DialogFooter className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0">
+                                    <DialogClose asChild>
+                                      <Button variant="outline" className="border-[#27272A] bg-transparent text-white hover:bg-[#111111] hover:text-white sm:mr-2">
+                                        Cancel
+                                      </Button>
+                                    </DialogClose>
+                                    <Button 
+                                      variant="destructive"
+                                      onClick={confirmKickUser}
+                                      className="bg-red-600 text-white hover:bg-red-700"
+                                    >
+                                      Yes, Kick User
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center text-[#6B7280]">
+                          No users found matching your filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="logs" className="mt-0">
+            <Card className="border border-[#1F2937] bg-[#111111]">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="border-b border-[#1F2937] bg-[#0A0A0A]/50">
+                    <TableRow className="border-none hover:bg-transparent">
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">User</TableHead>
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">Role</TableHead>
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">Email</TableHead>
+                      <TableHead className="text-xs font-semibold text-[#6B7280]">IP Address</TableHead>
+                      <TableHead className="text-right text-xs font-semibold text-[#6B7280]">Login Time</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loginLogs.length > 0 ? (
+                      loginLogs.map((log) => (
+                        <TableRow key={log.id} className="border-b border-[#1F2937]/50 hover:bg-[#1F2937]/20">
+                          <TableCell className="font-medium text-white">{log.user?.name || "Unknown"}</TableCell>
+                          <TableCell className="text-[#D1D5DB]">{log.user?.role || "N/A"}</TableCell>
+                          <TableCell className="text-[#D1D5DB]">{log.user?.email || "N/A"}</TableCell>
+                          <TableCell className="text-[#9CA3AF]">{log.ipAddress || "N/A"}</TableCell>
+                          <TableCell className="text-right text-[#9CA3AF]">{new Date(log.createdAt).toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-[#6B7280]">
+                          No login logs available.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
       </Card>

@@ -55,6 +55,9 @@ let nextStartupProfileId = 4;
 let nextConnectionRequestId = 3;
 let nextChatMessageId = 4;
 
+const loginLogs = [];
+let nextLoginLogId = 1;
+
 const prismaMock = {
   user: {
     findUnique: async ({ where }) => {
@@ -207,6 +210,27 @@ const prismaMock = {
       const newMsg = { id: nextChatMessageId++, createdAt: new Date().toISOString(), ...data };
       chatMessages.push(newMsg);
       return newMsg;
+    }
+  },
+  loginLog: {
+    findMany: async ({ include, orderBy } = {}) => {
+      // Very basic implementation
+      let result = [...loginLogs];
+      if (orderBy && orderBy.createdAt === 'desc') {
+        result.reverse();
+      }
+      if (include && include.user) {
+        result = result.map(l => {
+          const user = users.find(u => u.id === l.userId);
+          return { ...l, user };
+        });
+      }
+      return result;
+    },
+    create: async ({ data }) => {
+      const newLog = { id: nextLoginLogId++, createdAt: new Date().toISOString(), ...data };
+      loginLogs.push(newLog);
+      return newLog;
     }
   },
   $disconnect: async () => {}

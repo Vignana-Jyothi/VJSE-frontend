@@ -58,6 +58,7 @@ model User {
   branch             String?
   profileCompleted   Boolean  @default(false)
   approvedLeads      Lead[]   @relation("VolunteerApprovals")
+  loginLogs          LoginLog[]
 }
 
 model StartupProfile {
@@ -108,4 +109,12 @@ model SourcerRejectionLog {
   connectionId Int
   connection   ConnectionRequest @relation(fields: [connectionId], references: [id])
   createdAt    DateTime          @default(now())
+}
+
+model LoginLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  createdAt DateTime @default(now())
 }

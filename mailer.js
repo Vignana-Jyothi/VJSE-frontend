@@ -257,9 +257,54 @@ async function sendWelcomeEmail({
   console.log(`✉️ Welcome email sent to mentor: ${leadEmail}`);
 }
 
+// Email 5 — Sent to Admins and Volunteers when Founder requests connection
+async function sendAdminVolunteerNotificationEmail({
+  staffEmail,
+  staffName,
+  founderName,
+  startupName,
+  leadName,
+  leadOrganization
+}) {
+  const mailOptions = {
+    from: `"VJ Startups Alerts" <${process.env.EMAIL_FROM}>`,
+    to: staffEmail,
+    subject: `New Connection Request: ${founderName} wants to connect with ${leadName}`,
+    html: `
+      <div style="font-family: Georgia, serif; max-width: 620px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #111827; font-size: 22px; margin-bottom: 4px;">VJ Startups - Admin Alert</h2>
+        <p style="color: #6B7280; font-size: 13px; margin-top: 0;">Startup Support Ecosystem — VJ College</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+
+        <p style="font-size: 15px; color: #111827;">Hi ${staffName},</p>
+
+        <p style="font-size: 15px; color: #374151; line-height: 1.7;">
+          A founder has requested a new connection on the platform.
+        </p>
+
+        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; margin: 20px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #374151;"><strong>Founder:</strong> ${founderName}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #374151;"><strong>Startup:</strong> ${startupName}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #374151;"><strong>Lead:</strong> ${leadName}</p>
+          <p style="margin: 0; font-size: 14px; color: #374151;"><strong>Organization:</strong> ${leadOrganization}</p>
+        </div>
+
+        <p style="font-size: 15px; color: #374151; line-height: 1.7;">
+          Please log in to the admin dashboard to monitor the status of this request.
+        </p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+  console.log(`✉️ Admin notification email sent to: ${staffEmail}`);
+}
+
 module.exports = {
   sendSourcerIntroRequestEmail,
   sendLeadInviteEmail,
   sendSourcerNotificationEmail,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendAdminVolunteerNotificationEmail
 };
+
