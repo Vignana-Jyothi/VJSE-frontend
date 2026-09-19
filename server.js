@@ -15,7 +15,9 @@ const {
   sendSourcerNotificationEmail,
   sendWelcomeEmail,
   sendVolunteerNotificationEmail,
-  sendMentorLoginInviteEmail
+  sendMentorLoginInviteEmail,
+  sendLeadPlatformInviteEmail,
+  sendAdminVolunteerNotificationEmail
 } = require('./mailer');
 
 const Database = require('better-sqlite3');
@@ -325,6 +327,18 @@ app.post('/auth/google', authLimiter, async (req, res) => {
       profileCompleted: Boolean(user.profileCompleted)
     };
 
+    // Track Login
+    try {
+      await prisma.loginLog.create({
+        data: {
+          userId: user.id,
+          ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || null
+        }
+      });
+    } catch (logErr) {
+      console.error("Failed to track login:", logErr);
+    }
+
     res.json({ user: req.session.user });
   } catch (error) {
     console.error("Error in /auth/google:", error);
@@ -370,6 +384,25 @@ app.post('/logout', (req, res) => {
     res.json({ message: "Successfully logged out" });
   });
 });
+
+// GET /api/logs/logins - Fetch login logs for admin
+app.get('/api/logs/logins', requireRole('Admin'), async (req, res) => {
+  try {
+    const logs = await prisma.loginLog.findMany({
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100 // limit to last 100 logs
+    });
+    res.json(logs);
+  } catch (err) {
+    console.error("Error fetching login logs:", err);
+    res.status(500).json({ error: "Failed to fetch login logs" });
+  }
+});
+
+// --- ADMIN / USERS ROUTES ---
 
 // --- GOOGLE OAUTH ROUTES ---
 
@@ -493,6 +526,18 @@ app.post('/api/login', authLimiter, async (req, res) => {
       profileCompleted: Boolean(user.profileCompleted)
     };
 
+    // Track Login
+    try {
+      await prisma.loginLog.create({
+        data: {
+          userId: user.id,
+          ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || null
+        }
+      });
+    } catch (logErr) {
+      console.error("Failed to track login:", logErr);
+    }
+
     console.log(`User logged in: ${user.name} (${user.role}) - profileCompleted: ${Boolean(user.profileCompleted)}`);
     res.json({ user: req.session.user });
   } catch (error) {
@@ -613,6 +658,24 @@ app.post('/api/leads', requireAuth, async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     const sId = sourcerId ? parseInt(sourcerId) : (req.session?.user?.id ? parseInt(req.session.user.id) : null);
+
+    if (req.session?.user?.role === 'Student' && sId) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const leadCount = await prisma.lead.count({
+        where: {
+          sourcerId: sId,
+          createdAt: {
+            gte: today
+          }
+        }
+      });
+
+      if (leadCount >= 5) {
+        return res.status(429).json({ error: "You have reached the maximum limit of 5 lead submissions per day." });
+      }
+    }
 
     const lead = await prisma.lead.create({
       data: {
@@ -1090,7 +1153,8 @@ app.post('/api/connections', requireRole('Founder'), emailLimiter, async (req, r
       });
 
       const founder = await prisma.user.findUnique({
-        where: { id: parseInt(userId) }
+        where: { id: parseInt(userId) },
+        include: { startupProfile: true }
       });
 
       // Save sourcer invite token and set sourcer response to pending
@@ -1108,7 +1172,7 @@ app.post('/api/connections', requireRole('Founder'), emailLimiter, async (req, r
           sourcerEmail: lead.sourcer.email,
           sourcerName: lead.sourcer.name,
           founderName: founder?.name || 'A VJ Startup Founder',
-          startupName: founder?.name || 'VJ Startup',
+          startupName: founder?.startupProfile?.name || 'VJ Startup',
           mentorName: lead.name,
           sourcerInviteToken,
           connectionId: conn.id
@@ -1130,22 +1194,23 @@ app.post('/api/connections', requireRole('Founder'), emailLimiter, async (req, r
           }
         });
 
-        const { sendVolunteerNotificationEmail } = require('./mailer');
         for (const staff of volunteersAndAdmins) {
-          await sendVolunteerNotificationEmail({
-            staffEmail: staff.email,
-            staffName: staff.name,
-            staffRole: staff.role,
-            founderName: founder?.name || 'A Founder',
-            startupName: founder?.name || 'A VJ Startup',
-            mentorName: lead.name,
-            mentorDomain: lead.domain,
-            sourcerName: lead.sourcer?.name || 'Unknown',
-            sourcerEmail: lead.sourcer?.email || 'Unknown',
-            sourcerPhone: lead.sourcer?.phone || 'Not provided',
-            sourcerYear: lead.sourcer?.year || 'Not provided',
-            sourcerBranch: lead.sourcer?.branch || 'Not provided'
-          });
+          if (staff.email) {
+            await sendVolunteerNotificationEmail({
+              staffEmail: staff.email,
+              staffName: staff.name,
+              staffRole: staff.role,
+              founderName: founder?.name || 'A Founder',
+              startupName: founder?.startupProfile?.name || founder?.name || 'A VJ Startup',
+              mentorName: lead.name,
+              mentorDomain: lead.domain,
+              sourcerName: lead.sourcer?.name || 'Unknown',
+              sourcerEmail: lead.sourcer?.email || 'Unknown',
+              sourcerPhone: lead.sourcer?.phone || 'Not provided',
+              sourcerYear: lead.sourcer?.year || 'Not provided',
+              sourcerBranch: lead.sourcer?.branch || 'Not provided'
+            });
+          }
         }
       } catch (volErr) {
         console.error('Volunteer notification email failed:', volErr.message);
@@ -1232,6 +1297,7 @@ app.patch('/api/users/:id/blacklist', requireRole('Admin'), async (req, res) => 
   }
 });
 
+// DELETE /api/users/:id - Kick / delete user account
 // DELETE /api/users/:id - Kick / delete user account
 app.delete('/api/users/:id', requireRole('Admin'), async (req, res) => {
   try {
@@ -1696,16 +1762,8 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
         connectionId: parseInt(connectionId)
       });
 
-      return res.send(`
-        <html>
-          <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px;">
-            <h2 style="color: #1D9E75;">Thank you for agreeing to help!</h2>
-            <p>We have now reached out to ${connection.lead.name} on your behalf.</p>
-            <p>We will notify you once they respond.</p>
-            <p style="color: #6B7280; font-size: 14px;">You may close this tab.</p>
-          </body>
-        </html>
-      `);
+      // Redirect to the website as requested
+      return res.redirect('http://localhost:5173/');
     }
 
     if (response === 'no') {
@@ -1726,8 +1784,7 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
       return res.send(`
         <html>
           <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px;">
-            <h2 style="color: #374151;">Thank you for letting us know.</h2>
-            <p>We understand you are not able to help right now. The volunteer team will follow up if needed.</p>
+            <h2 style="color: #374151;">We will connect with u later.</h2>
             <p style="color: #6B7280; font-size: 14px;">You may close this tab.</p>
           </body>
         </html>

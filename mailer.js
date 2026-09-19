@@ -274,7 +274,7 @@ async function sendVolunteerNotificationEmail({
   const mailOptions = {
     from: `"VJ Startups" <${process.env.EMAIL_FROM}>`,
     to: staffEmail,
-    subject: `[${staffRole} Alert] ${founderName} has requested an intro for ${mentorName}`,
+    subject: `[${staffRole || 'Alert'}] ${founderName} has requested an intro for ${mentorName}`,
     html: `
       <div style="font-family: Georgia, serif; max-width: 620px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
         <h2 style="color: #111827; font-size: 22px; margin-bottom: 4px;">VJ Startups</h2>
@@ -297,7 +297,7 @@ async function sendVolunteerNotificationEmail({
         <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 16px; margin: 16px 0;">
           <p style="margin: 0 0 6px 0; font-size: 13px; color: #166534; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;">Mentor Details</p>
           <p style="margin: 0 0 4px 0; font-size: 14px; color: #14532D;"><strong>Mentor Name:</strong> ${mentorName}</p>
-          <p style="margin: 0; font-size: 14px; color: #14532D;"><strong>Domain:</strong> ${mentorDomain}</p>
+          <p style="margin: 0; font-size: 14px; color: #14532D;"><strong>Domain:</strong> ${mentorDomain || 'N/A'}</p>
         </div>
 
         <div style="background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; padding: 16px; margin: 16px 0;">
@@ -318,7 +318,7 @@ async function sendVolunteerNotificationEmail({
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
         <p style="font-size: 12px; color: #9CA3AF;">
           VJ Startups — Startup Support Ecosystem, VJ College.
-          This notification was sent to all ${staffRole}s automatically.
+          This notification was sent to all ${staffRole || 'staff'}s automatically.
         </p>
       </div>
     `,
@@ -326,6 +326,74 @@ async function sendVolunteerNotificationEmail({
 
   await transporter.sendMail(mailOptions);
   console.log(`✉️ Volunteer/Admin notification sent to: ${staffEmail}`);
+}
+
+async function sendAdminVolunteerNotificationEmail({
+  staffEmail,
+  staffName,
+  founderName,
+  startupName,
+  leadName,
+  leadOrganization
+}) {
+  const mailOptions = {
+    from: `"VJ Startups Alerts" <${process.env.EMAIL_FROM}>`,
+    to: staffEmail,
+    subject: `New Connection Request: ${founderName} wants to connect with ${leadName}`,
+    html: `
+      <div style="font-family: Georgia, serif; max-width: 620px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #111827; font-size: 22px; margin-bottom: 4px;">VJ Startups - Admin Alert</h2>
+        <p style="color: #6B7280; font-size: 13px; margin-top: 0;">Startup Support Ecosystem — VJ College</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+
+        <p style="font-size: 15px; color: #111827;">Hi ${staffName},</p>
+
+        <p style="font-size: 15px; color: #374151; line-height: 1.7;">
+          A founder has requested a new connection on the platform.
+        </p>
+
+        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; margin: 20px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #374151;"><strong>Founder:</strong> ${founderName}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #374151;"><strong>Startup:</strong> ${startupName}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #374151;"><strong>Lead:</strong> ${leadName}</p>
+          <p style="margin: 0; font-size: 14px; color: #374151;"><strong>Organization:</strong> ${leadOrganization || 'N/A'}</p>
+        </div>
+
+        <p style="font-size: 15px; color: #374151; line-height: 1.7;">
+          Please log in to the admin dashboard to monitor the status of this request.
+        </p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+  console.log(`✉️ Admin notification email sent to: ${staffEmail}`);
+}
+
+async function sendLeadPlatformInviteEmail({ leadEmail, leadName, domain }) {
+  const mailOptions = {
+    from: `"VJ Startups" <${process.env.EMAIL_FROM}>`,
+    to: leadEmail,
+    subject: `Invitation to join VJ Startups Ecosystem`,
+    html: `
+      <div style="font-family: Georgia, serif; max-width: 620px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #111827; font-size: 22px; margin-bottom: 4px;">VJ Startups</h2>
+        <p style="color: #6B7280; font-size: 13px; margin-top: 0;">Startup Support Ecosystem — VJ College</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+        <p style="font-size: 15px; color: #111827;">Dear ${leadName},</p>
+        <p style="font-size: 15px; color: #374151; line-height: 1.7;">
+          You have been invited to join VJ Startups platform as a mentor in ${domain}.
+        </p>
+        <div style="margin: 32px 0; text-align: center;">
+          <a href="${APP_BASE_URL}" style="display: inline-block; background-color: #1D9E75; color: white; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-size: 15px; font-weight: bold;">
+            Join VJ Startups Platform
+          </a>
+        </div>
+      </div>
+    `
+  };
+  await transporter.sendMail(mailOptions);
+  console.log(`✉️ Platform invite email sent to lead: ${leadEmail}`);
 }
 
 async function sendMentorLoginInviteEmail({
@@ -410,5 +478,8 @@ module.exports = {
   sendSourcerNotificationEmail,
   sendWelcomeEmail,
   sendVolunteerNotificationEmail,
+  sendAdminVolunteerNotificationEmail,
+  sendLeadPlatformInviteEmail,
   sendMentorLoginInviteEmail
 };
+
