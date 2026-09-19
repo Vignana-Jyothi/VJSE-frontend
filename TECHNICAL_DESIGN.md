@@ -80,12 +80,15 @@ The database schema is defined in `prisma/schema.prisma`.
   - Fields: `status` (Pending/Intro Made/Connected), `sourcerResponse`, `sourcerRespondedAt`, `mentorNotifiedAt`, `sourcerInviteToken`. Links `userId` (Founder) and `leadId`.
 - **ChatMessage**: Stores internal chat messages if founders/leads communicate on-platform.
 - **SourcerRejectionLog**: An audit log for tracking whenever a lead submission is rejected or a connection request fails, linked to the sourcer to monitor quality.
+- **LoginLog**: An audit log tracking user authentication attempts, storing `userId`, `ipAddress`, and `createdAt` timestamp.
 
 ### Database Encryption & Migrations
 We use `better-sqlite3-multiple-ciphers` with SQLCipher to ensure the database file (`dev.db`) is encrypted at rest. The `DB_ENCRYPTION_KEY` is critical; if lost, the database cannot be decrypted.
 
 **Custom Migration Approach:**
-Because the standard Prisma CLI (`npx prisma migrate dev`) does not support opening SQLCipher-encrypted SQLite files out of the box, we use custom scripts (`apply-migration.js`, `apply-migration-2.js`, `apply-migration-3.js`, `view-db.js`) that manually instantiate the encrypted database connection and run SQL statements. Manual SQL migration files are tracked under `prisma/migrations/`.
+Because the standard Prisma CLI (`npx prisma migrate dev`) does not support opening SQLCipher-encrypted SQLite files out of the box, we use custom scripts (`apply-migration.js`, `apply-migration-2.js`, `apply-migration-3.js`, `view-db.js`) that manually instantiate the encrypted database connection and run SQL statements.
+- `apply-migration-3.js`: Adds user mentor profile fields (`designation`, `experience`, `linkedIn`, `bio`, `hasSeenWelcome`, `hasLinkedAccount`), startup profile metrics (`tagline`, `problemStatement`, `solution`, `teamSize`, `helpNeeded`, `website`, `demoLink`, `achievement`, `trlLevel`), `mentorUserId` on `Lead`, and creates the `LoginLog` table.
+Manual SQL migration files are tracked under `prisma/migrations/`.
 
 ---
 
@@ -154,6 +157,10 @@ The email system is powered by `nodemailer` (`mailer.js`), authenticating via a 
 2. **sendLeadInviteEmail**: If the Sourcer clicks "Yes", an email is sent to the MENTOR with the Sourcer's name prominent as the introducer.
 3. **sendSourcerNotificationEmail**: Sent to the Sourcer notifying them that the intro request was forwarded to the mentor.
 4. **sendWelcomeEmail**: Sent to the Mentor confirming connection and providing next steps.
+5. **sendVolunteerNotificationEmail**: Sent to Volunteers and Admins with full details of new introduction requests (including sourcer student details: name, email, phone, year, branch).
+6. **sendAdminVolunteerNotificationEmail**: Alert email sent to Admins and Volunteers when a new connection request is initiated by a founder.
+7. **sendLeadPlatformInviteEmail**: Direct platform invitation email sent when an approved lead is invited to join the VJ Startups ecosystem.
+8. **sendMentorLoginInviteEmail**: Custom gradient invitation email sent to mentors allowing direct Google single-sign-on onboarding.
 
 **Note on `APP_BASE_URL`**: It is critical that `APP_BASE_URL` is set correctly in production. If missing, email links will default to `http://localhost:3000`, which will fail when clicked by external users.
 
@@ -231,6 +238,9 @@ The frontend is a Vite-powered React SPA using `react-router-dom` for navigation
 | Feature Add | Expanded intro flow and user profiles | External tracking | We needed fine-grained timestamps and volunteer approval tracking directly in the DB. | Enables a more detailed tracking of the introduction pipeline. |
 | 2026-09-10 | Added Mentor account linking & enhanced StartupProfile fields | Separate Mentor table | Linked mentors directly to User & Lead models (`mentorUserId`), added onboarding/welcome flags (`hasSeenWelcome`, `hasLinkedAccount`), and 9 startup metric fields (`tagline`, `problemStatement`, `solution`, `teamSize`, `helpNeeded`, `website`, `demoLink`, `achievement`, `trlLevel`). | Supports mentor dashboard, instant account linking, and deep startup profile customization. |
 | 2026-09-10 | Added volunteer/admin notification and mentor login invite emails | Only notifying sourcer | Ensures admins and volunteers have full visibility over intro requests for safety/auditing, and mentors get a seamless login link. | Adds `sendVolunteerNotificationEmail` and `sendMentorLoginInviteEmail` to `mailer.js` and integrates into connection flow. |
+| 2026-09-19 | Added `LoginLog` audit model and updated `apply-migration-3.js` | Unlogged logins | Audit requirement to capture authentication timestamps and IP addresses for security compliance. | Added `LoginLog` model to `schema.prisma` and updated encrypted SQLite migration script. |
+| 2026-09-19 | Consolidated email templates & invitation flows | Fragmented email helpers | Unified `sendVolunteerNotificationEmail`, `sendAdminVolunteerNotificationEmail`, `sendLeadPlatformInviteEmail`, and `sendMentorLoginInviteEmail` in `mailer.js`. | Ensures all roles (Admins, Volunteers, Mentors, Leads) receive structured HTML emails with actionable links. |
+| 2026-09-19 | Resolved 5-way branch merge conflicts & synced with `origin/akshay` | Overwriting local or remote commits | Combined local sourcer-first feature commits with remote admin alert & schema updates without losing functionality. | Verified build & Prisma schema integrity; repository is clean and 100% in sync. |
 
 ---
 
