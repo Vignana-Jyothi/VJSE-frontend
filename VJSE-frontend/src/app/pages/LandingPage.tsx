@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ShieldCheck, Search, Sparkles } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Card, CardContent, CardDescription, CardTitle } from "../components/ui/card";
+import { api } from "../data/api";
 
 export function LandingPage() {
   const [stats, setStats] = useState({ totalLeads: 0, verifiedLeads: 0, totalStartups: 0 });
@@ -12,16 +13,18 @@ export function LandingPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const statsRes = await fetch("/api/stats");
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
+        try {
+          const statsRes = await api.get("/api/stats");
+          setStats(statsRes.data);
+        } catch (sErr) {
+          console.error("Error fetching stats:", sErr);
         }
-        
-        const startupsRes = await fetch("/api/startups");
-        if (startupsRes.ok) {
-          const startupsData = await startupsRes.json();
-          setStartups(startupsData);
+
+        try {
+          const startupsRes = await api.get("/api/startups");
+          setStartups(startupsRes.data);
+        } catch (stErr) {
+          console.error("Error fetching startups:", stErr);
         }
       } catch (err) {
         console.error("Error fetching landing page data:", err);

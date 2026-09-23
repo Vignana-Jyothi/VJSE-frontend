@@ -21,6 +21,7 @@ import {
   UserCheck
 } from "lucide-react";
 import { UserRole } from "../data/network";
+import { api } from "../data/api";
 
 interface FounderPageProps {
   user: { id: number; fullName: string; email: string; role: UserRole } | null;
@@ -126,16 +127,14 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
   async function fetchStartupProfile(userId: number) {
     try {
       setLoadingProfile(true);
-      const res = await fetch(`/api/startup?userId=${userId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setStartup(data);
-        if (data) {
-          setStartupName(data.name);
-          setStartupStage(data.stage);
-          setStartupFocus(data.focus);
-          setStartupGoal(data.currentGoal);
-        }
+      const res = await api.get(`/api/startup?userId=${userId}`);
+      const data = res.data;
+      setStartup(data);
+      if (data) {
+        setStartupName(data.name);
+        setStartupStage(data.stage);
+        setStartupFocus(data.focus);
+        setStartupGoal(data.currentGoal);
       }
     } catch (err) {
       console.error("Error fetching startup profile:", err);
@@ -154,29 +153,19 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
     setSavingProfile(true);
     setProfileMsg("");
     try {
-      const res = await fetch("/api/startup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id,
-          name: startupName,
-          stage: startupStage,
-          focus: startupFocus,
-          currentGoal: startupGoal,
-        }),
+      const res = await api.post("/api/startup", {
+        userId: user?.id,
+        name: startupName,
+        stage: startupStage,
+        focus: startupFocus,
+        currentGoal: startupGoal,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setStartup(data);
-        setProfileMsg("Startup profile saved successfully!");
-        setTimeout(() => setProfileMsg(""), 4000);
-      } else {
-        const errData = await res.json();
-        setProfileMsg(`Error: ${errData.error || "Failed to save"}`);
-      }
-    } catch (err) {
-      setProfileMsg("Network error. Failed to save startup profile.");
+      setStartup(res.data);
+      setProfileMsg("Startup profile saved successfully!");
+      setTimeout(() => setProfileMsg(""), 4000);
+    } catch (err: any) {
+      setProfileMsg(`Error: ${err.response?.data?.error || "Failed to save startup profile"}`);
       console.error(err);
     } finally {
       setSavingProfile(false);
@@ -191,11 +180,8 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
       if (filterOrg) queryParams.append("organization", filterOrg);
       if (filterSkills) queryParams.append("skills", filterSkills);
 
-      const res = await fetch(`/api/approved-leads?${queryParams.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setLeads(data);
-      }
+      const res = await api.get(`/api/approved-leads?${queryParams.toString()}`);
+      setLeads(res.data);
     } catch (err) {
       console.error("Error fetching leads:", err);
     } finally {
@@ -206,11 +192,8 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
   async function fetchConnections(userId: number) {
     setLoadingConnections(true);
     try {
-      const res = await fetch(`/api/connections?userId=${userId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setConnections(data);
-      }
+      const res = await api.get(`/api/connections?userId=${userId}`);
+      setConnections(res.data);
     } catch (err) {
       console.error("Error fetching connections:", err);
     } finally {
@@ -221,20 +204,13 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
   async function handleSendRequest(leadId: number) {
     if (!user) return;
     try {
-      const res = await fetch("/api/connections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          leadId,
-        }),
+      await api.post("/api/connections", {
+        userId: user.id,
+        leadId,
       });
 
-      if (res.ok) {
-        // Refresh connection requests
-        await fetchConnections(user.id);
-        setRequestedLeadIds((prev) => [...prev, leadId]);
-      }
+      await fetchConnections(user.id);
+      setRequestedLeadIds((prev) => [...prev, leadId]);
     } catch (err) {
       console.error("Error sending connection request:", err);
     }
@@ -243,17 +219,11 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
   async function handleMockAcceptRequest(connectionId: number) {
     if (!user) return;
     try {
-      const res = await fetch(`/api/connections/${connectionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: "Accepted",
-        }),
+      await api.patch(`/api/connections/${connectionId}`, {
+        status: "Accepted",
       });
 
-      if (res.ok) {
-        await fetchConnections(user.id);
-      }
+      await fetchConnections(user.id);
     } catch (err) {
       console.error("Error accepting connection request:", err);
     }
@@ -261,11 +231,8 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
 
   async function fetchChats(userId: number, leadId: number) {
     try {
-      const res = await fetch(`/api/chats?userId=${userId}&leadId=${leadId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data);
-      }
+      const res = await api.get(`/api/chats?userId=${userId}&leadId=${leadId}`);
+      setMessages(res.data);
     } catch (err) {
       console.error("Error fetching chats:", err);
     }
@@ -280,26 +247,19 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
     setSendingMessage(true);
 
     try {
-      const res = await fetch("/api/chats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          leadId: activeLeadId,
-          sender: "Founder",
-          content: messageText,
-        }),
+      await api.post("/api/chats", {
+        userId: user.id,
+        leadId: activeLeadId,
+        sender: "Founder",
+        content: messageText,
       });
 
-      if (res.ok) {
-        await fetchChats(user.id, activeLeadId);
-        // Set a timeout to refresh the chats in 1.8s to capture the mock response
-        setTimeout(() => {
-          if (user && activeLeadId) {
-            fetchChats(user.id, activeLeadId);
-          }
-        }, 1800);
-      }
+      await fetchChats(user.id, activeLeadId);
+      setTimeout(() => {
+        if (user && activeLeadId) {
+          fetchChats(user.id, activeLeadId);
+        }
+      }, 1800);
     } catch (err) {
       console.error("Error sending message:", err);
     } finally {

@@ -3,6 +3,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LoginGate } from "../components/LoginGate";
 import { domainOptions } from "../data/network";
+import { api } from "../data/api";
 
 interface SearchPageProps {
   user: { id: number; fullName: string; email: string } | null;
@@ -27,9 +28,8 @@ export function SearchPage({ user, onLogin }: SearchPageProps) {
     setError("");
     try {
       // Fetch approved leads
-      const leadsRes = await fetch("/api/approved-leads");
-      if (!leadsRes.ok) throw new Error("Failed to fetch approved leads");
-      const rawLeads = await leadsRes.json();
+      const leadsRes = await api.get("/api/approved-leads");
+      const rawLeads = leadsRes.data;
       const mappedLeads = rawLeads.map((l: any) => ({
         id: l.id,
         name: l.name,
@@ -42,15 +42,16 @@ export function SearchPage({ user, onLogin }: SearchPageProps) {
       setLeads(mappedLeads);
 
       // Fetch connection requests for current founder
-      const connRes = await fetch(`/api/connections?userId=${user.id}`);
-      if (connRes.ok) {
-        const connData = await connRes.json();
-        const requestedIds = connData.map((c: any) => c.leadId);
+      try {
+        const connRes = await api.get(`/api/connections?userId=${user?.id}`);
+        const requestedIds = connRes.data.map((c: any) => c.leadId);
         setRequestedLeadIds(requestedIds);
+      } catch (cErr) {
+        console.error("Error fetching connections:", cErr);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to connect to the backend server.");
+      setError(err.response?.data?.error || "Failed to connect to the backend server.");
     } finally {
       setLoading(false);
     }
@@ -59,23 +60,14 @@ export function SearchPage({ user, onLogin }: SearchPageProps) {
   async function handleRequestIntroduction(leadId: number) {
     if (!user) return;
     try {
-      const res = await fetch("/api/connections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          leadId: leadId
-        })
+      await api.post("/api/connections", {
+        userId: user.id,
+        leadId: leadId
       });
-      if (res.ok) {
-        setRequestedLeadIds((prev) => [...prev, leadId]);
-      } else {
-        const errData = await res.json();
-        alert(errData.error || "Failed to request connection.");
-      }
-    } catch (err) {
+      setRequestedLeadIds((prev) => [...prev, leadId]);
+    } catch (err: any) {
       console.error(err);
-      alert("Error connecting to backend server.");
+      alert(err.response?.data?.error || "Failed to request connection.");
     }
   }
 

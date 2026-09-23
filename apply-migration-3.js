@@ -1,20 +1,21 @@
 require('dotenv').config();
 const path = require('path');
 const fsMod = require('fs');
-const Database = require('better-sqlite3');
+const Database = require('better-sqlite3-multiple-ciphers');
 
 class EncryptedDatabase extends Database {
   constructor(filename, options) {
     super(filename, options);
     const key = process.env.DB_ENCRYPTION_KEY || process.env.SQLCIPHER_KEY || 'my-super-secret-password';
-    this.pragma("cipher='sqlcipher'");
     this.pragma("key='" + key + "'");
+    this.pragma("cipher='sqlcipher'");
     this.pragma('journal_mode=WAL');
     this.pragma('busy_timeout=5000');
   }
 }
 
 const betterSqlite3Path = require.resolve('better-sqlite3');
+require('better-sqlite3');
 require.cache[betterSqlite3Path].exports = EncryptedDatabase;
 
 const db = new EncryptedDatabase(path.resolve(__dirname, 'dev.db'));

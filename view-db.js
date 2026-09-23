@@ -1,18 +1,20 @@
 require('dotenv').config();
-const Database = require('better-sqlite3');
+const Database = require('better-sqlite3-multiple-ciphers');
 const path = require('path');
 
-// Wrap better-sqlite3 with the SQLCipher key wrapper
 class EncryptedDatabase extends Database {
   constructor(filename, options) {
     super(filename, options);
-    const key = process.env.DB_ENCRYPTION_KEY || 'my-super-secret-password';
-    this.pragma("cipher='sqlcipher'");
+    const key = process.env.DB_ENCRYPTION_KEY || process.env.SQLCIPHER_KEY || 'my-super-secret-password';
     this.pragma(`key='${key}'`);
+    this.pragma("cipher='sqlcipher'");
+    this.pragma('journal_mode=WAL');
+    this.pragma('busy_timeout=5000');
   }
 }
 
 const betterSqlite3Path = require.resolve('better-sqlite3');
+require('better-sqlite3');
 require.cache[betterSqlite3Path].exports = EncryptedDatabase;
 
 const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');

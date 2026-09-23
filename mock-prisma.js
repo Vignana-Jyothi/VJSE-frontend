@@ -93,6 +93,13 @@ const prismaMock = {
         return users.splice(uIndex, 1)[0];
       }
       throw new Error("User not found");
+    },
+    count: async ({ where } = {}) => {
+      let result = [...users];
+      if (where) {
+        if (where.role) result = result.filter(u => u.role === where.role);
+      }
+      return result.length;
     }
   },
   lead: {

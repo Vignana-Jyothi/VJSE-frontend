@@ -8,6 +8,7 @@ import { Switch } from "../components/ui/switch";
 import { LoginGate } from "../components/LoginGate";
 import { domainOptions } from "../data/network";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { api } from "../data/api";
 
 interface AdminPageProps {
   user: { id: number; fullName: string; email: string; role: string } | null;
@@ -46,15 +47,12 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
     setError("");
     try {
       // 1. Fetch leads
-      const leadsRes = await fetch("/api/leads");
-      if (!leadsRes.ok) throw new Error("Failed to fetch leads");
-      const leadsData = await leadsRes.json();
-      setLeads(leadsData);
+      const leadsRes = await api.get("/api/leads");
+      setLeads(leadsRes.data);
 
       // 2. Fetch connection requests
-      const connRes = await fetch("/api/connections");
-      if (!connRes.ok) throw new Error("Failed to fetch connection requests");
-      const connData = await connRes.json();
+      const connRes = await api.get("/api/connections");
+      const connData = connRes.data;
       
       const mappedRequests = connData.map((c: any) => ({
         id: c.id,
@@ -77,21 +75,23 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
       setIntroRequests(mappedRequests);
 
       // 3. Fetch all platform users
-      const usersRes = await fetch("/api/users");
-      if (usersRes.ok) {
-        const usersData = await usersRes.json();
-        setUsersList(usersData);
+      try {
+        const usersRes = await api.get("/api/users");
+        setUsersList(usersRes.data);
+      } catch (uErr) {
+        console.error("Failed to fetch users:", uErr);
       }
 
       // 4. Fetch login logs
-      const logsRes = await fetch("/api/logs/logins");
-      if (logsRes.ok) {
-        const logsData = await logsRes.json();
-        setLoginLogs(logsData);
+      try {
+        const logsRes = await api.get("/api/logs/logins");
+        setLoginLogs(logsRes.data);
+      } catch (lErr) {
+        console.error("Failed to fetch login logs:", lErr);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to retrieve admin data from backend.");
+      setError(err.response?.data?.error || err.message || "Failed to retrieve admin data from backend.");
     } finally {
       setLoading(false);
     }
@@ -107,46 +107,35 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/users/${userObj.id}/role`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: newRole }),
-      });
-      if (res.ok) {
-        // Refresh users table
-        await fetchAdminData();
+      await api.patch(`/api/users/${userObj.id}/role`, { role: newRole });
+      
+      // Refresh users table
+      await fetchAdminData();
 
-        // Show per-row success indicator
-        setRoleSuccessId(userObj.id);
-        setTimeout(() => setRoleSuccessId(null), 2000);
+      // Show per-row success indicator
+      setRoleSuccessId(userObj.id);
+      setTimeout(() => setRoleSuccessId(null), 2000);
 
-        // Fix 5: If admin changed their own role, refresh the top-level session
-        if (user && userObj.id === user.id && onUserRefresh) {
-          try {
-            const sessionRes = await fetch("/check-auth");
-            if (sessionRes.ok) {
-              const sessionData = await sessionRes.json();
-              const fresh = sessionData.user || sessionData;
-              if (fresh && fresh.email) {
-                onUserRefresh({
-                  id: fresh.id,
-                  fullName: fresh.fullName || fresh.name || "VJ User",
-                  email: fresh.email,
-                  role: fresh.role,
-                });
-              }
-            }
-          } catch (refreshErr) {
-            console.error("Failed to refresh own session after role change:", refreshErr);
+      // If admin changed their own role, refresh the top-level session
+      if (user && userObj.id === user.id && onUserRefresh) {
+        try {
+          const sessionRes = await api.get("/check-auth");
+          const fresh = sessionRes.data.user || sessionRes.data;
+          if (fresh && fresh.email) {
+            onUserRefresh({
+              id: fresh.id,
+              fullName: fresh.fullName || fresh.name || "VJ User",
+              email: fresh.email,
+              role: fresh.role,
+            });
           }
+        } catch (refreshErr) {
+          console.error("Failed to refresh own session after role change:", refreshErr);
         }
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        setError(errData.error || "Failed to update user role.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Error changing user role.");
+      setError(err.response?.data?.error || "Error changing user role.");
     }
   }
 
@@ -154,19 +143,11 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
     const confirmed = window.confirm("Block this sourcer? They will be prevented from logging in.");
     if (!confirmed) return;
     try {
-      const res = await fetch(`/api/users/${userId}/blacklist`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blocked: true }),
-      });
-      if (res.ok) {
-        await fetchAdminData();
-      } else {
-        setError("Failed to block sourcer.");
-      }
-    } catch (err) {
+      await api.patch(`/api/users/${userId}/blacklist`, { blocked: true });
+      await fetchAdminData();
+    } catch (err: any) {
       console.error(err);
-      setError("Error blocking sourcer.");
+      setError(err.response?.data?.error || "Error blocking sourcer.");
     }
   }
 
@@ -177,17 +158,11 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
   async function confirmKickUser() {
     if (!selectedUserId) return;
     try {
-      const res = await fetch(`/api/users/${selectedUserId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        await fetchAdminData();
-      } else {
-        setError("Failed to kick user.");
-      }
-    } catch (err) {
+      await api.delete(`/api/users/${selectedUserId}`);
+      await fetchAdminData();
+    } catch (err: any) {
       console.error(err);
-      setError("Error kicking user.");
+      setError(err.response?.data?.error || "Error kicking user.");
     } finally {
       setSelectedUserId(null);
     }
@@ -262,38 +237,22 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
 
   async function handleVerifyToggle(leadId: number, currentVerified: boolean) {
     try {
-      const res = await fetch(`/api/leads/${leadId}/verify`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          verified: !currentVerified
-        })
-      });
-      if (res.ok) {
-        await fetchAdminData();
-      } else {
-        setError("Failed to toggle verification status.");
-      }
-    } catch (err) {
+      await api.patch(`/api/leads/${leadId}/verify`, { verified: !currentVerified });
+      await fetchAdminData();
+    } catch (err: any) {
       console.error(err);
-      setError("Error calling verification API.");
+      setError(err.response?.data?.error || "Error calling verification API.");
     }
   }
 
   async function confirmDelete() {
     if (!selectedLeadId) return;
     try {
-      const res = await fetch(`/api/leads/${selectedLeadId}`, {
-        method: "DELETE"
-      });
-      if (res.ok) {
-        await fetchAdminData();
-      } else {
-        setError("Failed to delete lead.");
-      }
-    } catch (err) {
+      await api.delete(`/api/leads/${selectedLeadId}`);
+      await fetchAdminData();
+    } catch (err: any) {
       console.error(err);
-      setError("Error calling delete API.");
+      setError(err.response?.data?.error || "Error calling delete API.");
     } finally {
       setSelectedLeadId(null);
     }
@@ -301,21 +260,11 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
 
   async function markHandled(connectionId: number) {
     try {
-      const res = await fetch(`/api/connections/${connectionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: "Accepted"
-        })
-      });
-      if (res.ok) {
-        await fetchAdminData();
-      } else {
-        setError("Failed to update connection request status.");
-      }
-    } catch (err) {
+      await api.patch(`/api/connections/${connectionId}`, { status: "Accepted" });
+      await fetchAdminData();
+    } catch (err: any) {
       console.error(err);
-      setError("Error updating connection status.");
+      setError(err.response?.data?.error || "Error updating connection status.");
     }
   }
 

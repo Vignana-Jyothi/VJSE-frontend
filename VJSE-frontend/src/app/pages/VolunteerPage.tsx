@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { UserRole } from "../data/network";
 import { LoginGate } from "../components/LoginGate";
+import { api } from "../data/api";
 
 interface VolunteerPageProps {
   user: { id: number; fullName: string; email: string; role: UserRole } | null;
@@ -81,16 +82,11 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
     setLoading(true);
     setActionError("");
     try {
-      const res = await fetch("/api/leads");
-      if (res.ok) {
-        const data = await res.json();
-        setLeads(data);
-      } else {
-        setActionError("Failed to retrieve leads from API.");
-      }
-    } catch (err) {
+      const res = await api.get("/api/leads");
+      setLeads(res.data);
+    } catch (err: any) {
       console.error(err);
-      setActionError("Failed to connect to the backend server.");
+      setActionError(err.response?.data?.error || "Failed to retrieve leads from API.");
     } finally {
       setLoading(false);
     }
@@ -98,11 +94,8 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
 
   async function fetchNotifications() {
     try {
-      const res = await fetch("/api/notifications/sourcer-declined");
-      if (res.ok) {
-        const data = await res.json();
-        setDeclinedNotifications(data);
-      }
+      const res = await api.get("/api/notifications/sourcer-declined");
+      setDeclinedNotifications(res.data);
     } catch (err) {
       console.error("Failed to fetch notifications", err);
     }
@@ -123,11 +116,8 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
     setExpandedConnections([]);
     
     try {
-      const res = await fetch(`/api/connections?leadId=${leadId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setExpandedConnections(data);
-      }
+      const res = await api.get(`/api/connections?leadId=${leadId}`);
+      setExpandedConnections(res.data);
     } catch (err) {
       console.error("Failed to fetch connections", err);
     } finally {
@@ -137,18 +127,11 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
 
   async function handleApprove(leadId: number) {
     try {
-      const res = await fetch(`/api/leads/${leadId}/approve`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" }
-      });
-      if (res.ok) {
-        await fetchLeads();
-      } else {
-        setActionError("Failed to approve the lead.");
-      }
-    } catch (err) {
+      await api.patch(`/api/leads/${leadId}/approve`);
+      await fetchLeads();
+    } catch (err: any) {
       console.error(err);
-      setActionError("Failed to connect to server for approval.");
+      setActionError(err.response?.data?.error || "Failed to approve the lead.");
     }
   }
 
@@ -157,37 +140,23 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
     if (!rejectingLeadId || !rejectionReason.trim()) return;
 
     try {
-      const res = await fetch(`/api/leads/${rejectingLeadId}/reject`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: rejectionReason })
-      });
-      if (res.ok) {
-        setRejectingLeadId(null);
-        setRejectionReason("");
-        await fetchLeads();
-      } else {
-        setActionError("Failed to submit rejection.");
-      }
-    } catch (err) {
+      await api.patch(`/api/leads/${rejectingLeadId}/reject`, { reason: rejectionReason });
+      setRejectingLeadId(null);
+      setRejectionReason("");
+      await fetchLeads();
+    } catch (err: any) {
       console.error(err);
-      setActionError("Failed to connect to server for rejection.");
+      setActionError(err.response?.data?.error || "Failed to submit rejection.");
     }
   }
 
   async function handleInvite(leadId: number) {
     try {
-      const res = await fetch(`/api/leads/${leadId}/invite`, {
-        method: "POST"
-      });
-      if (res.ok) {
-        await fetchLeads();
-      } else {
-        setActionError("Failed to dispatch invitation.");
-      }
-    } catch (err) {
+      await api.post(`/api/leads/${leadId}/invite`);
+      await fetchLeads();
+    } catch (err: any) {
       console.error(err);
-      setActionError("Failed to connect to server for invitation.");
+      setActionError(err.response?.data?.error || "Failed to dispatch invitation.");
     }
   }
 

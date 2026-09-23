@@ -20,17 +20,16 @@ const {
   sendAdminVolunteerNotificationEmail
 } = require('./mailer');
 
-const Database = require('better-sqlite3');
+const Database = require('better-sqlite3-multiple-ciphers');
 
 // 1. Intercept the 'better-sqlite3' connection to auto-inject the decryption key and set up pragmas
 class EncryptedDatabase extends Database {
   constructor(filename, options) {
     super(filename, options);
-    const key = process.env.DB_ENCRYPTION_KEY;
-    if (!key) throw new Error('FATAL: DB_ENCRYPTION_KEY environment variable is required');
+    const key = process.env.DB_ENCRYPTION_KEY || process.env.SQLCIPHER_KEY || 'my-super-secret-password';
     console.log(`[Express SQLCipher] Authenticating database: ${filename}`);
-    this.pragma("cipher='sqlcipher'");
     this.pragma(`key='${key}'`);
+    this.pragma("cipher='sqlcipher'");
     // Enable WAL mode and busy_timeout for concurrency
     this.pragma('journal_mode=WAL');
     this.pragma('busy_timeout=5000');
@@ -38,6 +37,7 @@ class EncryptedDatabase extends Database {
 }
 
 const betterSqlite3Path = require.resolve('better-sqlite3');
+require('better-sqlite3');
 require.cache[betterSqlite3Path].exports = EncryptedDatabase;
 
 const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');

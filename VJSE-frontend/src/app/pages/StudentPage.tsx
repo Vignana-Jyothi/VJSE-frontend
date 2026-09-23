@@ -6,6 +6,7 @@ import { Label } from "../components/ui/label";
 import { LoginGate } from "../components/LoginGate";
 import { Lock } from "lucide-react";
 import { professionOptions } from "../data/network";
+import { api } from "../data/api";
 
 interface StudentPageProps {
   user: { fullName: string; email: string } | null;
@@ -63,25 +64,16 @@ export function StudentPage({ user, onLogin, onSubmit }: StudentPageProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: leadName,
-          email: leadEmail,
-          phone: leadPhone,
-          socialMedia: socialMedia,
-          role: finalRole,
-          domain: "Other",
-          organization: organisation,
-          sourcerId: user.id
-        })
+      await api.post("/api/leads", {
+        name: leadName,
+        email: leadEmail,
+        phone: leadPhone,
+        socialMedia: socialMedia,
+        role: finalRole,
+        domain: "Other",
+        organization: organisation,
+        sourcerId: (user as any)?.id
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to submit lead.");
-      }
 
       onSubmit();
       setLeadName("");
@@ -95,7 +87,7 @@ export function StudentPage({ user, onLogin, onSubmit }: StudentPageProps) {
       setConsent(false);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Something went wrong. Make sure backend is running.");
+      setError(err.response?.data?.error || err.message || "Something went wrong. Make sure backend is running.");
     } finally {
       setLoading(false);
     }

@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { LoginGate } from "../components/LoginGate";
 import { AlertCircle, RefreshCw, MessageSquare, Send } from "lucide-react";
 import { UserRole } from "../data/network";
+import { api } from "../data/api";
 
 interface LeadsPageProps {
   user: { id: number; fullName: string; email: string; role: UserRole } | null;
@@ -36,9 +37,8 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
     setError("");
     try {
       // 1. Fetch all leads to find the matching lead record
-      const leadsRes = await fetch("/api/leads");
-      if (!leadsRes.ok) throw new Error("Failed to fetch leads");
-      const leadsData = await leadsRes.json();
+      const leadsRes = await api.get("/api/leads");
+      const leadsData = leadsRes.data;
       setLeads(leadsData);
 
       const matchingLead = leadsData.find((l: any) => l.email.toLowerCase() === user?.email.toLowerCase());
@@ -46,22 +46,24 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
 
       if (matchingLead) {
         // 2. Fetch connections
-        const connRes = await fetch("/api/connections");
-        if (connRes.ok) {
-          const connData = await connRes.json();
-          setConnections(connData);
+        try {
+          const connRes = await api.get("/api/connections");
+          setConnections(connRes.data);
+        } catch (cErr) {
+          console.error("Error fetching connections:", cErr);
         }
 
         // 3. Fetch startups
-        const startupsRes = await fetch("/api/startups");
-        if (startupsRes.ok) {
-          const startupsData = await startupsRes.json();
-          setStartups(startupsData);
+        try {
+          const startupsRes = await api.get("/api/startups");
+          setStartups(startupsRes.data);
+        } catch (sErr) {
+          console.error("Error fetching startups:", sErr);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to connect to the backend server.");
+      setError(err.response?.data?.error || "Failed to connect to the backend server.");
     } finally {
       setLoading(false);
     }
@@ -114,11 +116,8 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
 
   async function fetchChats(founderId: number, leadId: number) {
     try {
-      const res = await fetch(`/api/chats?userId=${founderId}&leadId=${leadId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data);
-      }
+      const res = await api.get(`/api/chats?userId=${founderId}&leadId=${leadId}`);
+      setMessages(res.data);
     } catch (err) {
       console.error("Error fetching chats:", err);
     }
@@ -133,20 +132,14 @@ export function LeadsPage({ user, onLogin }: LeadsPageProps) {
     setSendingMessage(true);
 
     try {
-      const res = await fetch("/api/chats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedStartup.userId,
-          leadId: leadRecord.id,
-          sender: "Lead",
-          content: messageText,
-        }),
+      await api.post("/api/chats", {
+        userId: selectedStartup.userId,
+        leadId: leadRecord.id,
+        sender: "Lead",
+        content: messageText,
       });
 
-      if (res.ok) {
-        await fetchChats(selectedStartup.userId, leadRecord.id);
-      }
+      await fetchChats(selectedStartup.userId, leadRecord.id);
     } catch (err) {
       console.error("Error sending message:", err);
     } finally {
