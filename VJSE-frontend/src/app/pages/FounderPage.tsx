@@ -92,24 +92,8 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
   const [connections, setConnections] = useState<ConnectionRequest[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
 
-  // Chat State
-  const [activeLeadId, setActiveLeadId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [sendingMessage, setSendingMessage] = useState(false);
   const [confirmingLeadId, setConfirmingLeadId] = useState<number | null>(null);
   const [requestedLeadIds, setRequestedLeadIds] = useState<number[]>([]);
-
-  // Auto-refresh chat timer
-  useEffect(() => {
-    if (activeTab === "chats" && activeLeadId && user) {
-      fetchChats(user.id, activeLeadId);
-      const interval = setInterval(() => {
-        fetchChats(user.id, activeLeadId);
-      }, 3000); // Poll chats every 3 seconds for simulated real-time feeling
-      return () => clearInterval(interval);
-    }
-  }, [activeTab, activeLeadId, user]);
 
   useEffect(() => {
     if (user) {
@@ -235,41 +219,16 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
     }
   }
 
-  async function fetchChats(userId: number, leadId: number) {
+  async function handleMockAcceptRequest(connectionId: number) {
+    if (!user) return;
     try {
-      const res = await api.get(`/api/chats?userId=${userId}&leadId=${leadId}`);
-      setMessages(res.data);
-    } catch (err) {
-      console.error("Error fetching chats:", err);
-    }
-  }
-
-  async function handleSendMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!chatInput.trim() || !user || !activeLeadId) return;
-
-    const messageText = chatInput;
-    setChatInput("");
-    setSendingMessage(true);
-
-    try {
-      await api.post("/api/chats", {
-        userId: user.id,
-        leadId: activeLeadId,
-        sender: "Founder",
-        content: messageText,
+      await api.patch(`/api/connections/${connectionId}`, {
+        status: "Accepted",
       });
 
-      await fetchChats(user.id, activeLeadId);
-      setTimeout(() => {
-        if (user && activeLeadId) {
-          fetchChats(user.id, activeLeadId);
-        }
-      }, 1800);
+      await fetchConnections(user.id);
     } catch (err) {
-      console.error("Error sending message:", err);
-    } finally {
-      setSendingMessage(false);
+      console.error("Error accepting connection request:", err);
     }
   }
 
@@ -278,12 +237,6 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
     const conn = connections.find(c => c.leadId === leadId);
     return conn ? { status: conn.status, id: conn.id } : null;
   };
-
-  const activeConnectionLead = useMemo(() => {
-    if (!activeLeadId) return null;
-    const conn = connections.find(c => c.leadId === activeLeadId);
-    return conn ? conn.lead : null;
-  }, [activeLeadId, connections]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -718,6 +671,8 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
           )}
         </Card>
       )}
+
+
 
       {/* Confirmation Dialog */}
       {confirmingLeadId !== null && (

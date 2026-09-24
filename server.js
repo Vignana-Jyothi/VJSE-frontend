@@ -1583,10 +1583,26 @@ app.get('/api/stats', async (req, res) => {
     const verifiedLeads = await prisma.lead.count({ where: { verified: true } });
     const totalStartups = await prisma.startupProfile.count();
 
+    // Count distinct users who have logged into the website
+    let activeUsers = 0;
+    try {
+      activeUsers = await prisma.user.count({
+        where: { loginLogs: { some: {} } }
+      });
+    } catch (countErr) {
+      try {
+        const logs = await prisma.loginLog.findMany({ select: { userId: true } });
+        activeUsers = new Set(logs.map(l => l.userId)).size;
+      } catch (logErr) {
+        activeUsers = await prisma.user.count();
+      }
+    }
+
     res.json({
       totalLeads,
       verifiedLeads,
-      totalStartups
+      totalStartups,
+      activeUsers
     });
   } catch (error) {
     console.error("Error fetching platform stats:", error);

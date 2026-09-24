@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardTitle } from "../components/ui/
 import { api } from "../data/api";
 
 export function LandingPage() {
-  const [stats, setStats] = useState({ totalLeads: 0, verifiedLeads: 0, totalStartups: 0 });
+  const [stats, setStats] = useState({ totalLeads: 0, verifiedLeads: 0, totalStartups: 0, activeUsers: 0 });
   const [startups, setStartups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,8 +72,8 @@ export function LandingPage() {
               <CardDescription className="text-sm text-[#9CA3AF]">Leads</CardDescription>
             </Card>
             <Card className="rounded-[20px] border border-[#1F2937] bg-[#141414] p-6 text-white shadow-sm">
-              <CardTitle className="text-4xl font-semibold text-[#3B82F6]">{loading ? "..." : stats.verifiedLeads}</CardTitle>
-              <CardDescription className="text-sm text-[#9CA3AF]">Verified</CardDescription>
+              <CardTitle className="text-4xl font-semibold text-[#3B82F6]">{loading ? "..." : (stats.activeUsers ?? 0)}</CardTitle>
+              <CardDescription className="text-sm text-[#9CA3AF]">Active Users</CardDescription>
             </Card>
             <Card className="rounded-[20px] border border-[#1F2937] bg-[#141414] p-6 text-white shadow-sm">
               <CardTitle className="text-4xl font-semibold">{loading ? "..." : stats.totalStartups}</CardTitle>

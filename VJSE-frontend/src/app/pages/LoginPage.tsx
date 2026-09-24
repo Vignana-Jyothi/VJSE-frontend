@@ -33,6 +33,7 @@ function getRedirectPath(role: UserRole, email?: string) {
   // Special rule for @vnrvjiet.in logins
   if (normalizedEmail.endsWith("@vnrvjiet.in")) {
     if (role === "Admin") return "/admin";
+    if (role === "Founder") return "/founder";
     if (normalizedEmail.startsWith("volunteer") || role === "Volunteer") return "/volunteer";
     return "/student";
   }
