@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Toaster, toast } from "sonner";
 import { TopNav } from "./components/TopNav";
 import { LandingPage } from "./pages/LandingPage";
 import { SubmitLeadPage } from "./pages/SubmitLeadPage";
@@ -14,6 +15,9 @@ import { Toast } from "./components/Toast";
 import { UserRole } from "./data/network";
 import { api } from "./data/api";
 import MentorPage from "./pages/MentorPage";
+import NotFoundPage from "./pages/NotFoundPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
+import TermsOfServicePage from "./pages/TermsOfServicePage";
 
 type AppUser = {
   id: number;
@@ -25,12 +29,33 @@ type AppUser = {
   hasLinkedAccount?: boolean;
 };
 
-const defaultUser: AppUser = {
-  id: 3,
-  fullName: "Aditi Sharma",
-  email: "aditi.sharma@vj.edu",
-  role: "Founder",
-};
+// ── Page Title Setter ──────────────────────────────────────────────────────────
+function PageTitleSetter({ user }: { user: AppUser | null }) {
+  const location = useLocation();
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === "/login") {
+      document.title = "VJ Startups — Sign In";
+    } else if (path === "/founder") {
+      document.title = "VJ Startups — Founder Dashboard";
+    } else if (path === "/volunteer") {
+      document.title = "VJ Startups — Volunteer Panel";
+    } else if (path === "/admin") {
+      document.title = "VJ Startups — Admin Dashboard";
+    } else if (path === "/mentor" || path === "/leads") {
+      document.title = "VJ Startups — Mentor Dashboard";
+    } else if (path === "/student" || path === "/submit-lead") {
+      document.title = "VJ Startups — Student Portal";
+    } else if (path === "/privacy") {
+      document.title = "VJ Startups — Privacy Policy";
+    } else if (path === "/terms") {
+      document.title = "VJ Startups — Terms of Service";
+    } else {
+      document.title = "VJ Startups — Startup Support Ecosystem";
+    }
+  }, [location, user]);
+  return null;
+}
 
 function ProfileCompletionModal({ onComplete, onLogout }: { onComplete: (phone: string, year: string, branch: string) => Promise<void>; onLogout: () => void }) {
   const [phone, setPhone] = useState("");
@@ -45,7 +70,6 @@ function ProfileCompletionModal({ onComplete, onLogout }: { onComplete: (phone: 
       setError("Please fill in all fields.");
       return;
     }
-    // Phone number validation (must be 10 to 15 digits)
     const digitsOnly = phone.replace(/\D/g, "");
     if (digitsOnly.length < 10 || digitsOnly.length > 15) {
       setError("Please enter a valid 10-digit phone number.");
@@ -83,22 +107,22 @@ function ProfileCompletionModal({ onComplete, onLogout }: { onComplete: (phone: 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-white">Phone Number</label>
-            <input 
-              type="tel" 
-              value={phone} 
-              onChange={e => setPhone(e.target.value)} 
-              className="w-full rounded bg-[#1F1F1F] border border-white/10 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" 
-              placeholder="e.g. +91 98765 43210" 
-              required 
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              className="w-full rounded bg-[#1F1F1F] border border-white/10 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="e.g. +91 98765 43210"
+              required
             />
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-white">Year of Study</label>
-            <select 
-              value={year} 
-              onChange={e => setYear(e.target.value)} 
-              className="w-full rounded bg-[#1F1F1F] border border-white/10 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" 
+            <select
+              value={year}
+              onChange={e => setYear(e.target.value)}
+              className="w-full rounded bg-[#1F1F1F] border border-white/10 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               required
             >
               <option value="" disabled>Select Year</option>
@@ -111,74 +135,45 @@ function ProfileCompletionModal({ onComplete, onLogout }: { onComplete: (phone: 
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-white">Branch</label>
-            <select 
-              value={branch} 
-              onChange={e => setBranch(e.target.value)} 
-              className="w-full rounded bg-[#1F1F1F] border border-white/10 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" 
+            <select
+              value={branch}
+              onChange={e => setBranch(e.target.value)}
+              className="w-full rounded bg-[#1F1F1F] border border-white/10 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               required
             >
               <option value="" disabled>Select Branch</option>
-              
-              <optgroup label="CSE & IT" className="bg-[#1F1F1F] text-emerald-400 font-bold">
-                <option value="Computer Science & Engineering (CSE and CSBS)" className="text-white font-normal">
-                  Computer Science & Engineering (CSE and CSBS)
-                </option>
-                <option value="CSE (AI & ML) & IoT and R&AI" className="text-white font-normal">
-                  CSE (AI & ML) & IoT and R&AI
-                </option>
-                <option value="CSE-(CyS,DS) and AI&DS" className="text-white font-normal">
-                  CSE-(CyS,DS) and AI&DS
-                </option>
-                <option value="Information Technology" className="text-white font-normal">
-                  Information Technology
-                </option>
+              <optgroup label="CSE &amp; IT" className="bg-[#1F1F1F] text-emerald-400 font-bold">
+                <option value="Computer Science &amp; Engineering (CSE and CSBS)" className="text-white font-normal">Computer Science &amp; Engineering (CSE and CSBS)</option>
+                <option value="CSE (AI &amp; ML) &amp; IoT and R&amp;AI" className="text-white font-normal">CSE (AI &amp; ML) &amp; IoT and R&amp;AI</option>
+                <option value="CSE-(CyS,DS) and AI&amp;DS" className="text-white font-normal">CSE-(CyS,DS) and AI&amp;DS</option>
+                <option value="Information Technology" className="text-white font-normal">Information Technology</option>
               </optgroup>
-
               <optgroup label="Engineering" className="bg-[#1F1F1F] text-emerald-400 font-bold">
-                <option value="Automobile Engineering" className="text-white font-normal">
-                  Automobile Engineering
-                </option>
-                <option value="Biotechnology" className="text-white font-normal">
-                  Biotechnology
-                </option>
-                <option value="Civil Engineering" className="text-white font-normal">
-                  Civil Engineering
-                </option>
-                <option value="Electrical & Electronics Engineering" className="text-white font-normal">
-                  Electrical & Electronics Engineering
-                </option>
-                <option value="Electronics and Communication Engineering (ECE) & Electronics Engineering (VLSI Design and Technology - EVL)" className="text-white font-normal">
-                  Electronics and Communication Engineering (ECE) & Electronics Engineering (VLSI Design and Technology - EVL)
-                </option>
-                <option value="Electronics and Instrumentation Engineering" className="text-white font-normal">
-                  Electronics and Instrumentation Engineering
-                </option>
-                <option value="Mechanical Engineering" className="text-white font-normal">
-                  Mechanical Engineering
-                </option>
+                <option value="Automobile Engineering" className="text-white font-normal">Automobile Engineering</option>
+                <option value="Biotechnology" className="text-white font-normal">Biotechnology</option>
+                <option value="Civil Engineering" className="text-white font-normal">Civil Engineering</option>
+                <option value="Electrical &amp; Electronics Engineering" className="text-white font-normal">Electrical &amp; Electronics Engineering</option>
+                <option value="Electronics and Communication Engineering (ECE)" className="text-white font-normal">Electronics and Communication Engineering (ECE)</option>
+                <option value="Electronics and Instrumentation Engineering" className="text-white font-normal">Electronics and Instrumentation Engineering</option>
+                <option value="Mechanical Engineering" className="text-white font-normal">Mechanical Engineering</option>
               </optgroup>
-
               <optgroup label="Other Disciplines" className="bg-[#1F1F1F] text-emerald-400 font-bold">
-                <option value="Sciences & Humanities" className="text-white font-normal">
-                  Sciences & Humanities
-                </option>
-                <option value="Other" className="text-white font-normal">
-                  Other
-                </option>
+                <option value="Sciences &amp; Humanities" className="text-white font-normal">Sciences &amp; Humanities</option>
+                <option value="Other" className="text-white font-normal">Other</option>
               </optgroup>
             </select>
           </div>
 
           <div className="flex items-center gap-3 mt-6">
-            <button 
+            <button
               type="button"
               onClick={onLogout}
               className="w-1/3 rounded border border-white/20 bg-transparent px-4 py-2.5 font-semibold text-white hover:bg-white/10 transition text-sm"
             >
               Log Out
             </button>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-2/3 rounded bg-emerald-600 px-4 py-2.5 font-bold text-white hover:bg-emerald-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition text-sm"
             >
@@ -231,10 +226,6 @@ const RocketAnimation = ({ onComplete }: { onComplete: () => void }) => {
         @keyframes starTwinkle {
           0%, 100% { opacity: 0.3; }
           50% { opacity: 1; }
-        }
-        @keyframes trailFade {
-          0% { opacity: 0.8; height: 0px; }
-          100% { opacity: 0; height: 80px; }
         }
       `}</style>
 
@@ -419,7 +410,6 @@ export default function App() {
         }
       } catch (err) {
         console.log("No active session found:", err);
-        // Clear invalid token
         localStorage.removeItem("token");
         setUser(null);
       }
@@ -447,6 +437,27 @@ export default function App() {
       };
       checkMatch();
     }
+  }, [user]);
+
+  // Fix 21 — Session timeout: warn at 23h, auto-logout at 24h
+  useEffect(() => {
+    if (!user) return;
+    const warningTimer = setTimeout(() => {
+      toast('Your session will expire in 1 hour. Click to refresh.', {
+        duration: 30000,
+        action: {
+          label: 'Stay logged in',
+          onClick: () => api.get('/check-auth').catch(() => {})
+        }
+      });
+    }, 23 * 60 * 60 * 1000);
+    const logoutTimer = setTimeout(() => {
+      handleLogout();
+    }, 24 * 60 * 60 * 1000);
+    return () => {
+      clearTimeout(warningTimer);
+      clearTimeout(logoutTimer);
+    };
   }, [user]);
 
   function handleLogin(
@@ -520,7 +531,7 @@ export default function App() {
     try {
       await api.post('/api/users/link-mentor-account', { leadId: matchedLead.id, confirmed: true });
       setShowLinkingModal(false);
-      setShowRocket(true); // Show rocket again for the linking celebration
+      setShowRocket(true);
       if (user) setUser({ ...user, hasLinkedAccount: true });
     } catch (e) {
       console.error(e);
@@ -534,6 +545,19 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="dark min-h-screen bg-[#0A0A0A] text-white">
+        {/* Sonner Toaster — fixes 13 & 14 */}
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          toastOptions={{
+            style: {
+              background: '#111111',
+              border: '1px solid #1F2937',
+              color: 'white',
+            },
+          }}
+        />
+        <PageTitleSetter user={user} />
         {showRocket && <RocketAnimation onComplete={handleRocketComplete} />}
         {showLinkingModal && matchedLead && (
           <AccountLinkingModal
@@ -564,13 +588,18 @@ export default function App() {
             <Route path="/founder" element={<FounderPage user={user} onLogin={() => handleLogin("Founder")} />} />
             <Route path="/volunteer" element={<VolunteerPage user={user} onLogin={() => handleLogin("Volunteer")} />} />
             <Route path="/admin" element={<AdminPage user={user} onLogin={() => handleLogin("Admin")} onUserRefresh={setUser} />} />
-            {user?.role === 'Mentor' && <Route path="/mentor" element={<MentorPage user={user} onLogout={handleLogout} />} />}
-            <Route path="*" element={<Navigate replace to="/network" />} />
+            {/* Fix 4 — Mentor route always available (not conditional on user.role) */}
+            <Route path="/mentor" element={<MentorPage user={user} onLogout={handleLogout} />} />
+            {/* Fix 17 — Legal pages accessible without login */}
+            <Route path="/privacy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms" element={<TermsOfServicePage />} />
+            {/* Fix 12 — 404 catch-all */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
         {toastMessage ? <Toast message={toastMessage} /> : null}
-        
-        {user && user.profileCompleted === false && ['Student', 'Founder', 'Volunteer'].includes(user.role) && (
+
+        {user && user.profileCompleted === false && user.role === 'Student' && (
           <ProfileCompletionModal onComplete={handleProfileComplete} onLogout={handleLogout} />
         )}
       </div>
