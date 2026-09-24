@@ -1838,6 +1838,82 @@ app.get('/api/notifications/sourcer-declined', requireRole('Admin', 'Volunteer')
 });
 
 
+
+// ─── Fix 17 Part 3 — Data Deletion Request ────────────────────────────────────
+app.post('/api/privacy/delete-request', async (req, res) => {
+  try {
+    const { email, reason } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    console.log(`DATA DELETION REQUEST: email=${email} reason=${reason || 'Not provided'} timestamp=${new Date().toISOString()}`);
+    // Admin notification logged to console; email requires transporter setup in server
+    res.json({ success: true, message: 'Your deletion request has been received. We will action it within 7 working days.' });
+  } catch (error) {
+    console.error('Error processing deletion request:', error);
+    res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+// ─── Fix 17 Part 3 — Data Access Request ────────────────────────────────────
+app.post('/api/privacy/access-request', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    const lead = await prisma.lead.findFirst({
+      where: { email: email.toLowerCase() },
+      include: { sourcer: { select: { name: true } } }
+    });
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      select: { name: true, email: true, role: true, createdAt: true }
+    });
+    res.json({
+      message: 'Here is the data we hold about you',
+      leadRecord: lead ? {
+        name: lead.name,
+        domain: lead.domain,
+        organisation: lead.organization,
+        city: lead.city,
+        submittedBy: lead.sourcer?.name || 'A VJ student',
+        submittedAt: lead.createdAt,
+        status: lead.status
+      } : null,
+      userAccount: user || null
+    });
+  } catch (error) {
+    console.error('Error processing access request:', error);
+    res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+// ─── Fix 18 — Unsubscribe Route ──────────────────────────────────────────────
+app.get('/api/unsubscribe', async (req, res) => {
+  try {
+    const { email, token } = req.query;
+    if (!email || !token) {
+      return res.status(400).send('Invalid unsubscribe link.');
+    }
+    await prisma.lead.updateMany({
+      where: { email: String(email) },
+      data: { inviteAccepted: false, inviteToken: null, status: 'Unsubscribed' }
+    });
+    res.send(`
+      <html>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px; background: #0A0A0A; color: white;">
+          <h2 style="color: #1D9E75;">You have been unsubscribed</h2>
+          <p style="color: #9CA3AF;">You will no longer receive emails from VJ Startups. If this was a mistake please contact us at vjstartups25@gmail.com.</p>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Unsubscribe error:', error);
+    res.status(500).send('Something went wrong.');
+  }
+});
+
 // --- GLOBAL ERROR HANDLER (must be after all routes) ---
 app.use((err, req, res, next) => {
   console.error(`[ERROR] ${req.method} ${req.path}:`, err);

@@ -1,5 +1,5 @@
 require('dotenv').config();
-const Database = require('better-sqlite3');
+const Database = require('better-sqlite3-multiple-ciphers');
 const path = require('path');
 const bcrypt = require('bcrypt');
 
@@ -7,13 +7,17 @@ const bcrypt = require('bcrypt');
 class EncryptedDatabase extends Database {
   constructor(filename, options) {
     super(filename, options);
-    const key = process.env.SQLCIPHER_KEY || 'my-super-secret-password';
+    const key = process.env.DB_ENCRYPTION_KEY || process.env.SQLCIPHER_KEY || 'my-super-secret-password';
     console.log(`🔐 [Seeder] Authenticating database: ${filename}`);
     this.pragma(`key='${key}'`);
+    this.pragma("cipher='sqlcipher'");
+    this.pragma('journal_mode=WAL');
+    this.pragma('busy_timeout=5000');
   }
 }
 
 const betterSqlite3Path = require.resolve('better-sqlite3');
+require('better-sqlite3');
 require.cache[betterSqlite3Path].exports = EncryptedDatabase;
 
 // 2. Import Prisma

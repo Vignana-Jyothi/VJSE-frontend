@@ -76,6 +76,9 @@ async function sendSourcerIntroRequestEmail({
           This message was sent by VJ Startups because you submitted a contact to our platform. 
           If you have any concerns please reply to this email.
         </p>
+        <p style="font-size: 11px; color: #9CA3AF; text-align: center; margin-top: 16px;">
+          <a href="${APP_BASE_URL}/api/unsubscribe?email=${encodeURIComponent(sourcerEmail)}&token=vjstartups2026" style="color: #6B7280;">Unsubscribe from VJ Startups emails</a>
+        </p>
       </div>
     `,
   };
