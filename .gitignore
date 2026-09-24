@@ -1,12 +1,19 @@
-node_modules
+node_modules/
 # Keep environment variables out of version control
 .env
 .env.local
 .env.production
 
 # Database files — NEVER commit these
-/generated/prisma
+/generated/
 *.db
 *.db-shm
 *.db-wal
 *.db-journal
+
+# Build output
+dist/
+**/dist/
+
+# Migration scripts with sensitive schema info
+apply-migration*.js
