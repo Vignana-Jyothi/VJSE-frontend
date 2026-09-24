@@ -115,6 +115,90 @@ const emailLimiter = rateLimit({
   message: { error: 'Too many requests. Please try again later.' },
 });
 
+// --- TIMEZONE & SESSION EXPIRATION HELPERS (Asia/Kolkata - IST / UTC+5:30) ---
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function getISTDateInfo(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const dateStr = formatter.format(date); // Format: "YYYY-MM-DD"
+  const [yearStr, monthStr, dayStr] = dateStr.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+
+  // Exact UTC timestamps corresponding to boundaries in Asia/Kolkata
+  const startOfDayUTC = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - IST_OFFSET_MS);
+  const endOfDayUTC = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - IST_OFFSET_MS);
+  const nextMidnightUTC = new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0) - IST_OFFSET_MS);
+
+  const msUntilMidnight = Math.max(0, nextMidnightUTC.getTime() - date.getTime());
+
+  return {
+    dateStr,
+    year,
+    month,
+    day,
+    startOfDayUTC,
+    endOfDayUTC,
+    nextMidnightUTC,
+    msUntilMidnight
+  };
+}
+
+function isSessionExpiredIST(session) {
+  if (!session || !session.user) return false;
+  const now = new Date();
+  const currentIST = getISTDateInfo(now);
+
+  // Expired if login date does not match current calendar date in Asia/Kolkata
+  if (session.loginDateIST && session.loginDateIST !== currentIST.dateStr) {
+    return true;
+  }
+  // Expired if current time is past calculated midnight timestamp
+  if (session.expiresAtIST && now.getTime() >= session.expiresAtIST) {
+    return true;
+  }
+  // Legacy session without IST date tracking must re-authenticate
+  if (!session.loginDateIST) {
+    return true;
+  }
+  return false;
+}
+
+function attachISTSessionLifetime(req) {
+  const istInfo = getISTDateInfo(new Date());
+  req.session.loginDateIST = istInfo.dateStr;
+  req.session.expiresAtIST = istInfo.nextMidnightUTC.getTime();
+  if (req.session.cookie) {
+    req.session.cookie.expires = istInfo.nextMidnightUTC;
+    req.session.cookie.maxAge = istInfo.msUntilMidnight;
+  }
+}
+
+// In-process mutex for serializing submissions per user to prevent race conditions
+const userSubmissionLocks = new Map();
+
+async function withUserLock(userId, asyncFn) {
+  while (userSubmissionLocks.has(userId)) {
+    await userSubmissionLocks.get(userId);
+  }
+  let resolveLock;
+  const lockPromise = new Promise((resolve) => { resolveLock = resolve; });
+  userSubmissionLocks.set(userId, lockPromise);
+
+  try {
+    return await asyncFn();
+  } finally {
+    userSubmissionLocks.delete(userId);
+    resolveLock();
+  }
+}
+
 // Configure Sessions and Passport Middlewares
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret || sessionSecret === 'a-fallback-session-secret' || sessionSecret === 'a-secure-random-session-secret-key') {
@@ -129,12 +213,27 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',  // HTTPS only in production
     httpOnly: true,                                   // Prevent JS access to cookie
     sameSite: 'lax',                                  // CSRF protection
-    maxAge: 24 * 60 * 60 * 1000,                      // 24 hour expiry
+    maxAge: 24 * 60 * 60 * 1000,                      // Default maxAge; overwritten per session to midnight IST
   }
 }));
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Middleware to enforce IST Midnight Session Expiration on all requests
+app.use((req, res, next) => {
+  if (req.session && req.session.user) {
+    if (isSessionExpiredIST(req.session)) {
+      console.log(`[Auth] Session for user ${req.session.user.id} (${req.session.user.email}) expired at midnight IST.`);
+      req.session.user = null;
+      return req.session.destroy(() => {
+        res.clearCookie('connect.sid');
+        next();
+      });
+    }
+  }
+  next();
+});
 
 // Log incoming requests with timing
 app.use((req, res, next) => {
@@ -149,6 +248,13 @@ app.use((req, res, next) => {
 // --- AUTHENTICATION & AUTHORIZATION MIDDLEWARE ---
 function requireAuth(req, res, next) {
   if (req.session && req.session.user) {
+    if (isSessionExpiredIST(req.session)) {
+      req.session.user = null;
+      return req.session.destroy(() => {
+        res.clearCookie('connect.sid');
+        return res.status(401).json({ error: 'Session expired at the end of the calendar day (IST). Please log in again.' });
+      });
+    }
     return next();
   }
   if (req.isAuthenticated && req.isAuthenticated()) {
@@ -159,6 +265,13 @@ function requireAuth(req, res, next) {
 
 function requireRole(...roles) {
   return (req, res, next) => {
+    if (req.session && req.session.user && isSessionExpiredIST(req.session)) {
+      req.session.user = null;
+      return req.session.destroy(() => {
+        res.clearCookie('connect.sid');
+        return res.status(401).json({ error: 'Session expired at the end of the calendar day (IST). Please log in again.' });
+      });
+    }
     if (!req.session?.user && !(req.isAuthenticated && req.isAuthenticated())) {
       return res.status(401).json({ error: 'Authentication required' });
     }
@@ -326,6 +439,7 @@ app.post('/auth/google', authLimiter, async (req, res) => {
       role: user.role,
       profileCompleted: Boolean(user.profileCompleted)
     };
+    attachISTSessionLifetime(req);
 
     // Track Login
     try {
@@ -349,6 +463,14 @@ app.post('/auth/google', authLimiter, async (req, res) => {
 // GET /check-auth - Verify existing session (always fetch fresh from DB)
 app.get('/check-auth', async (req, res) => {
   if (req.session && req.session.user) {
+    if (isSessionExpiredIST(req.session)) {
+      console.log(`[Auth] Session for user ${req.session.user.id} expired at midnight IST during /check-auth`);
+      req.session.user = null;
+      return req.session.destroy(() => {
+        res.clearCookie('connect.sid');
+        return res.status(401).json({ error: "Session expired at the end of the calendar day (IST). Please log in again." });
+      });
+    }
     try {
       const freshUser = await prisma.user.findUnique({
         where: { id: req.session.user.id }
@@ -415,6 +537,10 @@ app.get('/auth/google', passport.authenticate('google', {
 app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/login' }),
   (req, res) => {
+    // Attach IST session lifetime
+    if (req.session) {
+      attachISTSessionLifetime(req);
+    }
     // Redirect to the frontend application dashboard upon successful login
     res.redirect('http://localhost:5173/');
   }
@@ -525,6 +651,7 @@ app.post('/api/login', authLimiter, async (req, res) => {
       role: user.role,
       profileCompleted: Boolean(user.profileCompleted)
     };
+    attachISTSessionLifetime(req);
 
     // Track Login
     try {
@@ -656,25 +783,48 @@ app.post('/api/leads', requireAuth, async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-
     const sId = sourcerId ? parseInt(sourcerId) : (req.session?.user?.id ? parseInt(req.session.user.id) : null);
 
+    // If student, enforce max 5 submissions per Asia/Kolkata calendar day with concurrency lock
     if (req.session?.user?.role === 'Student' && sId) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const result = await withUserLock(sId, async () => {
+        const istInfo = getISTDateInfo(new Date());
 
-      const leadCount = await prisma.lead.count({
-        where: {
-          sourcerId: sId,
-          createdAt: {
-            gte: today
+        const leadCount = await prisma.lead.count({
+          where: {
+            sourcerId: sId,
+            createdAt: {
+              gte: istInfo.startOfDayUTC,
+              lte: istInfo.endOfDayUTC
+            }
           }
+        });
+
+        if (leadCount >= 5) {
+          return { error: true, status: 429, message: "You have reached the maximum limit of 5 lead submissions for today (Asia/Kolkata). Your limit will reset at midnight IST." };
         }
+
+        const newLead = await prisma.lead.create({
+          data: {
+            name,
+            email: normalizedEmail,
+            domain,
+            organization,
+            city: city || '',
+            skills: skills || '',
+            verified: false,
+            sourcerId: sId
+          }
+        });
+        return { error: false, lead: newLead };
       });
 
-      if (leadCount >= 5) {
-        return res.status(429).json({ error: "You have reached the maximum limit of 5 lead submissions per day." });
+      if (result.error) {
+        return res.status(result.status).json({ error: result.message });
       }
+
+      console.log("Created new lead in SQLCipher:", result.lead);
+      return res.status(201).json(result.lead);
     }
 
     const lead = await prisma.lead.create({
@@ -1157,11 +1307,13 @@ app.post('/api/connections', requireRole('Founder'), emailLimiter, async (req, r
         include: { startupProfile: true }
       });
 
-      // Save sourcer invite token and set sourcer response to pending
+      // Save sourcer invite token with exact 7-day expiration and set sourcer response to pending
+      const sourcerInviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await prisma.connectionRequest.update({
         where: { id: conn.id },
         data: {
           sourcerInviteToken,
+          sourcerInviteExpiresAt,
           sourcerResponse: 'pending'
         }
       });
@@ -1547,9 +1699,13 @@ app.post('/api/leads/:id/invite', requireRole('Admin', 'Volunteer'), emailLimite
       domain: lead.domain || 'your domain'
     });
 
+    const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const updated = await prisma.lead.update({
       where: { id },
-      data: { invited: true }
+      data: {
+        invited: true,
+        inviteExpiresAt
+      }
     });
 
     res.json({ message: "Invite sent successfully", lead: updated });
@@ -1594,6 +1750,102 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+function renderExpiredInviteHtml() {
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Invitation Expired - VJ Startups</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background-color: #0B0F17;
+        color: #F8FAFC;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      .card {
+        background: #151C28;
+        border: 1px solid #1E293B;
+        border-radius: 16px;
+        padding: 48px 36px;
+        max-width: 480px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      }
+      .icon-container {
+        width: 56px;
+        height: 56px;
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px auto;
+        color: #EF4444;
+        font-size: 24px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        background: rgba(239, 68, 68, 0.15);
+        color: #F87171;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 0 0 12px 0;
+        color: #FFFFFF;
+      }
+      p {
+        color: #94A3B8;
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 0 0 28px 0;
+      }
+      .btn {
+        display: inline-block;
+        background: #2563EB;
+        color: #FFFFFF;
+        text-decoration: none;
+        padding: 12px 28px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 14px;
+        transition: background 0.2s ease;
+      }
+      .btn:hover {
+        background: #1D4ED8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="icon-container">&#9888;</div>
+      <div class="badge">Invitation Expired</div>
+      <h1>This invitation link has expired</h1>
+      <p>Invitations are valid for exactly 7 days (7 &times; 24 hours) from issuance. This invitation has expired and can no longer be used. Please contact the VJ Startups team or the founder if a new invitation is required.</p>
+      <a href="${FRONTEND_URL}" class="btn">Return to VJ Startups</a>
+    </div>
+  </body>
+</html>`;
+}
+
 app.get('/api/invite/respond', async (req, res) => {
   try {
     const { token, response, connectionId } = req.query;
@@ -1612,6 +1864,12 @@ app.get('/api/invite/respond', async (req, res) => {
       return res.status(404).send('This invite link is invalid or has already been used.');
     }
 
+    // Enforce 7-day invitation expiration check server-side
+    if (lead.inviteExpiresAt && new Date() > new Date(lead.inviteExpiresAt)) {
+      console.log(`[Invite] Lead invite token expired for lead ID ${lead.id}`);
+      return res.status(410).send(renderExpiredInviteHtml());
+    }
+
     // Find the connection request
     const connection = await prisma.connectionRequest.findUnique({
       where: { id: parseInt(connectionId) },
@@ -1623,10 +1881,10 @@ app.get('/api/invite/respond', async (req, res) => {
     }
 
     if (response === 'yes') {
-      // Mark lead as invite accepted
+      // Mark lead as invite accepted and clear token/expiration
       await prisma.lead.update({
         where: { id: lead.id },
-        data: { inviteAccepted: true, inviteToken: null }
+        data: { inviteAccepted: true, inviteToken: null, inviteExpiresAt: null }
       });
 
       // Update connection status to Intro Made
@@ -1655,10 +1913,10 @@ app.get('/api/invite/respond', async (req, res) => {
     }
 
     if (response === 'no') {
-      // Clear invite token
+      // Clear invite token and expiration
       await prisma.lead.update({
         where: { id: lead.id },
-        data: { inviteToken: null }
+        data: { inviteToken: null, inviteExpiresAt: null }
       });
 
       // Update connection status to declined
@@ -1729,9 +1987,16 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
       return res.status(404).send('This link is invalid or has already been used.');
     }
 
+    // Enforce 7-day sourcer invitation expiration check server-side
+    if (connection.sourcerInviteExpiresAt && new Date() > new Date(connection.sourcerInviteExpiresAt)) {
+      console.log(`[Invite] Sourcer invite token expired for connection ID ${connection.id}`);
+      return res.status(410).send(renderExpiredInviteHtml());
+    }
+
     if (response === 'yes') {
       const crypto = require('crypto');
       const mentorInviteToken = crypto.randomBytes(32).toString('hex');
+      const mentorInviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       // Update connection — sourcer accepted, now contact mentor
       await prisma.connectionRequest.update({
@@ -1740,15 +2005,19 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
           sourcerResponse: 'accepted',
           sourcerRespondedAt: new Date(),
           sourcerInviteToken: null,
+          sourcerInviteExpiresAt: null,
           status: 'Sourcer Accepted',
           mentorNotifiedAt: new Date()
         }
       });
 
-      // Save mentor invite token to lead
+      // Save mentor invite token to lead with exact 7-day expiration
       await prisma.lead.update({
         where: { id: connection.lead.id },
-        data: { inviteToken: mentorInviteToken }
+        data: {
+          inviteToken: mentorInviteToken,
+          inviteExpiresAt: mentorInviteExpiresAt
+        }
       });
 
       // Now send email to MENTOR with sourcer name prominent
@@ -1774,6 +2043,7 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
           sourcerResponse: 'declined',
           sourcerRespondedAt: new Date(),
           sourcerInviteToken: null,
+          sourcerInviteExpiresAt: null,
           status: 'Sourcer Declined'
         }
       });
