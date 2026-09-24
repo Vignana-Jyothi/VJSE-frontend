@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Home, User, Search, Users, Bell, Edit3, Briefcase, ExternalLink, ShieldCheck } from 'lucide-react';
 import { api } from '../data/api';
 import { Toast } from '../components/Toast';
@@ -47,10 +48,10 @@ export default function MentorPage({ user, onLogout }: { user: any, onLogout: ()
     setSavingProfile(true);
     try {
       await api.post('/api/mentor/profile', profileForm);
-      setToastMessage("Profile updated successfully!");
-      setTimeout(() => setToastMessage(""), 3000);
+      toast.success('Profile saved successfully.');
     } catch (err) {
       console.error("Failed to save profile", err);
+      toast.error('Failed to save profile. Please try again.');
     } finally {
       setSavingProfile(false);
     }

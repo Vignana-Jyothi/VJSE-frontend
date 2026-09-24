@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Textarea } from "../components/ui/textarea";
@@ -125,38 +126,64 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
     }
   }
 
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
   async function handleApprove(leadId: number) {
+    if (approvingId === leadId) return; // prevent double click
+    setApprovingId(leadId);
     try {
       await api.patch(`/api/leads/${leadId}/approve`);
       await fetchLeads();
+      toast.success('Lead approved and added to the searchable database.');
     } catch (err: any) {
       console.error(err);
-      setActionError(err.response?.data?.error || "Failed to approve the lead.");
+      const msg = err.response?.data?.error || "Failed to approve the lead.";
+      setActionError(msg);
+      toast.error(msg);
+    } finally {
+      setApprovingId(null);
     }
   }
 
+  const [rejectingLoading, setRejectingLoading] = useState(false);
+
   async function handleReject(e: React.FormEvent) {
     e.preventDefault();
-    if (!rejectingLeadId || !rejectionReason.trim()) return;
+    if (!rejectingLeadId || !rejectionReason.trim() || rejectingLoading) return;
 
+    setRejectingLoading(true);
     try {
       await api.patch(`/api/leads/${rejectingLeadId}/reject`, { reason: rejectionReason });
       setRejectingLeadId(null);
       setRejectionReason("");
       await fetchLeads();
+      toast.success('Lead rejected. The sourcer will be notified.');
     } catch (err: any) {
       console.error(err);
-      setActionError(err.response?.data?.error || "Failed to submit rejection.");
+      const msg = err.response?.data?.error || "Failed to submit rejection.";
+      setActionError(msg);
+      toast.error(msg);
+    } finally {
+      setRejectingLoading(false);
     }
   }
 
+  const [invitingId, setInvitingId] = useState<number | null>(null);
+
   async function handleInvite(leadId: number) {
+    if (invitingId === leadId) return;
+    setInvitingId(leadId);
     try {
       await api.post(`/api/leads/${leadId}/invite`);
       await fetchLeads();
+      toast.success('Invitation sent to mentor successfully.');
     } catch (err: any) {
       console.error(err);
-      setActionError(err.response?.data?.error || "Failed to dispatch invitation.");
+      const msg = err.response?.data?.error || "Failed to dispatch invitation.";
+      setActionError(msg);
+      toast.error(msg);
+    } finally {
+      setInvitingId(null);
     }
   }
 
@@ -282,8 +309,10 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
       ) : filteredLeads.length === 0 ? (
         <Card className="rounded-[28px] border border-[#1F2937] bg-[#111111] p-12 text-center text-[#9CA3AF]">
           <ShieldCheck className="h-10 w-10 text-gray-600 mx-auto mb-3" />
-          <p className="text-lg font-semibold text-white">No leads in "{activeTab}" status</p>
-          <p className="text-sm mt-1">Everything looks caught up in this tab!</p>
+          <p className="text-lg font-semibold text-white">
+            {activeTab === 'Pending' ? 'All leads have been reviewed. Great work.' : `No leads in "${activeTab}" status`}
+          </p>
+          <p className="text-sm mt-1">{activeTab === 'Pending' ? 'Check back later for new submissions.' : 'Everything looks caught up in this tab!'}</p>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -329,11 +358,12 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
                       <>
                         <Button
                           size="sm"
+                          disabled={approvingId === lead.id}
                           onClick={() => handleApprove(lead.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white rounded-lg px-4 h-9 font-semibold text-xs"
+                          className="bg-green-600 hover:bg-green-700 text-white rounded-lg px-4 h-9 font-semibold text-xs disabled:opacity-60"
                         >
                           <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
-                          Approve Lead
+                          {approvingId === lead.id ? 'Approving...' : 'Approve Lead'}
                         </Button>
                         <Button
                           size="sm"
@@ -350,11 +380,12 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
                     {lead.status === "Approved" && !lead.invited && (
                       <Button
                         size="sm"
+                        disabled={invitingId === lead.id}
                         onClick={() => handleInvite(lead.id)}
-                        className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg px-4 h-9 font-semibold text-xs"
+                        className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg px-4 h-9 font-semibold text-xs disabled:opacity-60"
                       >
                         <Send className="mr-1.5 h-3.5 w-3.5" />
-                        Send Join Invite
+                        {invitingId === lead.id ? 'Sending...' : 'Send Join Invite'}
                       </Button>
                     )}
 
@@ -561,9 +592,10 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold"
+                  disabled={rejectingLoading}
+                  className="bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold disabled:opacity-60"
                 >
-                  Submit Rejection
+                  {rejectingLoading ? 'Submitting...' : 'Submit Rejection'}
                 </Button>
               </div>
             </form>

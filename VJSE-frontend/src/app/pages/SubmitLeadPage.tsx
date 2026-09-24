@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -102,6 +103,7 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
       });
 
       onSubmit();
+      toast.success('Lead submitted successfully. A volunteer will review it shortly.');
       setLeadName("");
       setLeadEmail("");
       setLeadPhone("");
@@ -114,7 +116,9 @@ export function SubmitLeadPage({ user, onLogin, onSubmit }: SubmitLeadPageProps)
       setConsent(false);
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.error || err.message || "Something went wrong. Make sure backend is running.");
+      const msg = err.response?.data?.error || err.message || "Something went wrong. Make sure backend is running.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

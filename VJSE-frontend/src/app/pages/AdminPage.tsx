@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
@@ -112,6 +113,9 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
       // Refresh users table
       await fetchAdminData();
 
+      // Show success toast
+      toast.success('Role updated successfully.');
+
       // Show per-row success indicator
       setRoleSuccessId(userObj.id);
       setTimeout(() => setRoleSuccessId(null), 2000);
@@ -135,7 +139,9 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.error || "Error changing user role.");
+      const msg = err.response?.data?.error || "Error changing user role.";
+      setError(msg);
+      toast.error(msg);
     }
   }
 
@@ -145,9 +151,12 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
     try {
       await api.patch(`/api/users/${userId}/blacklist`, { blocked: true });
       await fetchAdminData();
+      toast.success('Sourcer blocked successfully.');
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.error || "Error blocking sourcer.");
+      const msg = err.response?.data?.error || "Error blocking sourcer.";
+      setError(msg);
+      toast.error(msg);
     }
   }
 
@@ -362,6 +371,7 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
               </div>
             )}
 
+            <div className="overflow-x-auto w-full">
             <Table>
               <TableHeader>
                 <TableRow className="text-[#9CA3AF]">
@@ -452,6 +462,7 @@ export function AdminPage({ user, onLogin, onUserRefresh }: AdminPageProps) {
                   )))}
               </TableBody>
             </Table>
+            </div>
           </TabsContent>
 
           <TabsContent value="requests">

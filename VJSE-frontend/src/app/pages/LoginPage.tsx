@@ -270,6 +270,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           <div id="google-signin-button" className="w-full min-h-[44px] flex justify-center"></div>
         </CardContent>
       </Card>
+
+      {/* Fix 17 — Legal Footer */}
+      <div className="text-center text-xs text-[#4B5563] mt-4 space-x-3">
+        <a href="/privacy" className="hover:text-[#9CA3AF] transition-colors">Privacy Policy</a>
+        <span>·</span>
+        <a href="/terms" className="hover:text-[#9CA3AF] transition-colors">Terms of Service</a>
+        <span>·</span>
+        <span>© {new Date().getFullYear()} VJ Startups</span>
+      </div>
     </div>
   );
 }

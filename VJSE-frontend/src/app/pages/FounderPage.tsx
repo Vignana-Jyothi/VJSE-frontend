@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
@@ -163,9 +164,12 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
 
       setStartup(res.data);
       setProfileMsg("Startup profile saved successfully!");
+      toast.success('Startup profile saved.');
       setTimeout(() => setProfileMsg(""), 4000);
     } catch (err: any) {
-      setProfileMsg(`Error: ${err.response?.data?.error || "Failed to save startup profile"}`);
+      const msg = `Error: ${err.response?.data?.error || "Failed to save startup profile"}`;
+      setProfileMsg(msg);
+      toast.error('Failed to save profile. Please try again.');
       console.error(err);
     } finally {
       setSavingProfile(false);
@@ -211,8 +215,10 @@ export function FounderPage({ user, onLogin }: FounderPageProps) {
 
       await fetchConnections(user.id);
       setRequestedLeadIds((prev) => [...prev, leadId]);
+      toast.success('Introduction requested. The sourcer has been notified.');
     } catch (err) {
       console.error("Error sending connection request:", err);
+      toast.error('Something went wrong. Please try again.');
     }
   }
 
