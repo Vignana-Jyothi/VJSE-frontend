@@ -1,0 +1,25 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ${{ github.ref == 'refs/heads/main' && 'gamma' || 'dev-ai' }}
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Environment Variables
+        run: |
+          echo "${{ secrets.ENV_VARIABLES }}" > .env
+
+      - name: Build and Deploy with Docker Compose
+        run: |
+          docker compose down
+          docker compose up -d --build
