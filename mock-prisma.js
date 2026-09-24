@@ -117,8 +117,29 @@ const prismaMock = {
     findUnique: async ({ where }) => {
       return leads.find(l => l.id === where.id) || null;
     },
+    findFirst: async ({ where } = {}) => {
+      let result = [...leads];
+      if (where) {
+        if (where.id) result = result.filter(l => l.id === where.id);
+        if (where.inviteToken) result = result.filter(l => l.inviteToken === where.inviteToken);
+        if (where.email) result = result.filter(l => l.email.toLowerCase() === where.email.toLowerCase());
+      }
+      if (result.length === 0) return null;
+      const l = result[0];
+      const sourcer = users.find(u => u.id === (l.sourcerId || 1)) || users[0];
+      const connections = connectionRequests.filter(c => c.leadId === l.id);
+      return { ...l, sourcer, connections };
+    },
     create: async ({ data }) => {
-      const newLead = { id: nextLeadId++, verified: false, status: "Pending", invited: false, rejectionReason: "", ...data };
+      const newLead = { 
+        id: nextLeadId++, 
+        verified: false, 
+        status: "Pending", 
+        invited: false, 
+        rejectionReason: "", 
+        createdAt: new Date().toISOString(),
+        ...data 
+      };
       leads.push(newLead);
       return newLead;
     },
@@ -141,6 +162,17 @@ const prismaMock = {
       let result = [...leads];
       if (where) {
         if (where.verified !== undefined) result = result.filter(l => l.verified === where.verified);
+        if (where.sourcerId !== undefined) result = result.filter(l => l.sourcerId === where.sourcerId);
+        if (where.createdAt) {
+          if (where.createdAt.gte) {
+            const gteTime = new Date(where.createdAt.gte).getTime();
+            result = result.filter(l => new Date(l.createdAt || Date.now()).getTime() >= gteTime);
+          }
+          if (where.createdAt.lte) {
+            const lteTime = new Date(where.createdAt.lte).getTime();
+            result = result.filter(l => new Date(l.createdAt || Date.now()).getTime() <= lteTime);
+          }
+        }
       }
       return result.length;
     }
@@ -183,6 +215,29 @@ const prismaMock = {
         const user = users.find(u => u.id === c.userId);
         return { ...c, lead, user };
       });
+    },
+    findUnique: async ({ where } = {}) => {
+      const c = connectionRequests.find(c => c.id === where.id);
+      if (!c) return null;
+      const rawLead = leads.find(l => l.id === c.leadId);
+      const sourcer = users.find(u => u.id === (rawLead?.sourcerId || 1)) || users[0];
+      const lead = rawLead ? { ...rawLead, sourcer } : null;
+      const user = users.find(u => u.id === c.userId);
+      return { ...c, lead, user };
+    },
+    findFirst: async ({ where } = {}) => {
+      let result = [...connectionRequests];
+      if (where) {
+        if (where.id) result = result.filter(c => c.id === where.id);
+        if (where.sourcerInviteToken) result = result.filter(c => c.sourcerInviteToken === where.sourcerInviteToken);
+      }
+      if (result.length === 0) return null;
+      const c = result[0];
+      const rawLead = leads.find(l => l.id === c.leadId);
+      const sourcer = users.find(u => u.id === (rawLead?.sourcerId || 1)) || users[0];
+      const lead = rawLead ? { ...rawLead, sourcer } : null;
+      const user = users.find(u => u.id === c.userId);
+      return { ...c, lead, user };
     },
     upsert: async ({ where, update, create }) => {
       const cIndex = connectionRequests.findIndex(c => c.userId === where.userId_leadId.userId && c.leadId === where.userId_leadId.leadId);

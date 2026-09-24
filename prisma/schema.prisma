@@ -32,6 +32,7 @@ model Lead {
   chatMessages          ChatMessage[]
   rejectionLogs         SourcerRejectionLog[]
   inviteToken           String?
+  inviteExpiresAt       DateTime?
   inviteAccepted        Boolean               @default(false)
   approvedByVolunteerId Int?
   approvedByVolunteer   User?                 @relation("VolunteerApprovals", fields: [approvedByVolunteerId], references: [id])
@@ -103,6 +104,7 @@ model ConnectionRequest {
   sourcerRespondedAt DateTime?
   mentorNotifiedAt   DateTime?
   sourcerInviteToken String?
+  sourcerInviteExpiresAt DateTime?
 
   @@unique([userId, leadId])
 }
