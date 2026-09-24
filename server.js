@@ -2025,8 +2025,6 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
       console.log(`[Invite] Sourcer invite token expired for connection ID ${connection.id}`);
       return res.status(410).send(renderExpiredInviteHtml());
     }
-    }
-
     if (response === 'yes') {
       const crypto = require('crypto');
       const mentorInviteToken = crypto.randomBytes(32).toString('hex');
