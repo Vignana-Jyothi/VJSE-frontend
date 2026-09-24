@@ -29,6 +29,13 @@ type AppUser = {
   hasLinkedAccount?: boolean;
 };
 
+function ProtectedRoute({ user, children }: { user: AppUser | null, children: JSX.Element }) {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
 // ── Page Title Setter ──────────────────────────────────────────────────────────
 function PageTitleSetter({ user }: { user: AppUser | null }) {
   const location = useLocation();
@@ -574,22 +581,22 @@ export default function App() {
             <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
             <Route
               path="/student"
-              element={<StudentPage user={user} onLogin={() => handleLogin("Student")} onSubmit={handleSubmitSuccess} />}
+              element={<ProtectedRoute user={user}><StudentPage user={user} onLogin={() => handleLogin("Student")} onSubmit={handleSubmitSuccess} /></ProtectedRoute>}
             />
             <Route
               path="/submit-lead"
-              element={<SubmitLeadPage user={user} onLogin={() => handleLogin("Student")} onSubmit={handleSubmitSuccess} />}
+              element={<ProtectedRoute user={user}><SubmitLeadPage user={user} onLogin={() => handleLogin("Student")} onSubmit={handleSubmitSuccess} /></ProtectedRoute>}
             />
             <Route
               path="/leads"
-              element={<LeadsPage user={user} onLogin={() => handleLogin("Mentor")} />}
+              element={<ProtectedRoute user={user}><LeadsPage user={user} onLogin={() => handleLogin("Mentor")} /></ProtectedRoute>}
             />
-            <Route path="/search" element={<SearchPage user={user} onLogin={() => handleLogin("Founder")} />} />
-            <Route path="/founder" element={<FounderPage user={user} onLogin={() => handleLogin("Founder")} />} />
-            <Route path="/volunteer" element={<VolunteerPage user={user} onLogin={() => handleLogin("Volunteer")} />} />
-            <Route path="/admin" element={<AdminPage user={user} onLogin={() => handleLogin("Admin")} onUserRefresh={setUser} />} />
+            <Route path="/search" element={<ProtectedRoute user={user}><SearchPage user={user} onLogin={() => handleLogin("Founder")} /></ProtectedRoute>} />
+            <Route path="/founder" element={<ProtectedRoute user={user}><FounderPage user={user} onLogin={() => handleLogin("Founder")} /></ProtectedRoute>} />
+            <Route path="/volunteer" element={<ProtectedRoute user={user}><VolunteerPage user={user} onLogin={() => handleLogin("Volunteer")} /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute user={user}><AdminPage user={user} onLogin={() => handleLogin("Admin")} onUserRefresh={setUser} /></ProtectedRoute>} />
             {/* Fix 4 — Mentor route always available (not conditional on user.role) */}
-            <Route path="/mentor" element={<MentorPage user={user} onLogout={handleLogout} />} />
+            <Route path="/mentor" element={<ProtectedRoute user={user}><MentorPage user={user} onLogout={handleLogout} /></ProtectedRoute>} />
             {/* Fix 17 — Legal pages accessible without login */}
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/terms" element={<TermsOfServicePage />} />

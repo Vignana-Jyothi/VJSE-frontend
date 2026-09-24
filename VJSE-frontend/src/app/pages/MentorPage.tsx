@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Home, User, Search, Users, Bell, Edit3, Briefcase, ExternalLink, ShieldCheck } from 'lucide-react';
+import { Home, User, Search, Users, Bell, Edit3, Briefcase, ExternalLink, ShieldCheck, Menu, X } from 'lucide-react';
 import { api } from '../data/api';
 import { Toast } from '../components/Toast';
 
@@ -9,6 +9,15 @@ export default function MentorPage({ user, onLogout }: { user: any, onLogout: ()
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSidebarOpen(false);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
 
   // Search/Filter state for Startups
   const [searchQuery, setSearchQuery] = useState("");
@@ -86,10 +95,32 @@ export default function MentorPage({ user, onLogout }: { user: any, onLogout: ()
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#0A0A0A]">
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#0A0A0A] relative">
+      {/* Mobile Hamburger */}
+      <button 
+        onClick={() => setSidebarOpen(true)}
+        className="md:hidden absolute top-6 left-6 z-20 p-2 bg-[#111111] border border-[#1F2937] rounded-lg text-white"
+      >
+        <Menu size={20} />
+      </button>
+
+      {/* Backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/80 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-64 bg-[#111111] border-r border-[#1F2937] flex flex-col justify-between flex-shrink-0">
-        <div className="p-4 space-y-2">
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#111111] border-r border-[#1F2937] flex flex-col justify-between flex-shrink-0 transition-transform duration-300 md:relative md:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <button 
+          onClick={() => setSidebarOpen(false)}
+          className="md:hidden absolute top-4 right-4 text-[#9CA3AF] hover:text-white"
+        >
+          <X size={24} />
+        </button>
+        <div className="p-4 space-y-2 mt-12 md:mt-0">
           <button onClick={() => setActiveTab('home')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${activeTab === 'home' ? 'bg-[#1D9E75]/10 text-[#1D9E75] font-medium' : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'}`}>
             <Home size={18} /> Home
           </button>
@@ -132,7 +163,7 @@ export default function MentorPage({ user, onLogout }: { user: any, onLogout: ()
 
         {/* HOME TAB */}
         {activeTab === 'home' && (
-          <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
+          <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300 md:pt-0 pt-12">
             <div className="bg-gradient-to-br from-[#1D9E75]/20 to-transparent border border-[#1D9E75]/30 rounded-3xl p-8 relative overflow-hidden">
               <div className="relative z-10">
                 <h1 className="text-3xl font-bold text-white mb-2">Welcome, {user.fullName}</h1>
@@ -209,7 +240,7 @@ export default function MentorPage({ user, onLogout }: { user: any, onLogout: ()
 
         {/* PROFILE TAB */}
         {activeTab === 'profile' && (
-          <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-300">
+          <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-300 md:pt-0 pt-12">
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">My Profile</h1>
               <p className="text-[#9CA3AF]">Manage how founders see you on the platform.</p>
@@ -306,7 +337,7 @@ export default function MentorPage({ user, onLogout }: { user: any, onLogout: ()
 
         {/* BROWSE STARTUPS TAB */}
         {activeTab === 'browse' && (
-          <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
+          <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300 md:pt-0 pt-12">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-white mb-2">Startups</h1>
@@ -380,7 +411,7 @@ export default function MentorPage({ user, onLogout }: { user: any, onLogout: ()
 
         {/* CONNECTIONS TAB */}
         {activeTab === 'connections' && (
-          <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
+          <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300 md:pt-0 pt-12">
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">My Connections</h1>
               <p className="text-[#9CA3AF]">Track intro requests from founders.</p>

@@ -1622,6 +1622,23 @@ app.get('/api/invite/respond', async (req, res) => {
       return res.status(404).send('Connection request not found.');
     }
 
+    // Check if token is expired — 7 days
+    const tokenAge = Date.now() - new Date(connection.createdAt).getTime();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    if (tokenAge > sevenDays) {
+      return res.status(410).send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px; background: #0A0A0A; color: white;">
+            <h2 style="color: #EF4444;">This link has expired</h2>
+            <p style="color: #9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6;">
+              This invitation link is older than 7 days and is no longer valid.
+              Please contact the VJ Startups team if you still wish to connect.
+            </p>
+          </body>
+        </html>
+      `);
+    }
+
     if (response === 'yes') {
       // Mark lead as invite accepted
       await prisma.lead.update({
@@ -1727,6 +1744,23 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
 
     if (!connection) {
       return res.status(404).send('This link is invalid or has already been used.');
+    }
+
+    // Check if token is expired — 7 days
+    const tokenAge = Date.now() - new Date(connection.createdAt).getTime();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    if (tokenAge > sevenDays) {
+      return res.status(410).send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 60px; background: #0A0A0A; color: white;">
+            <h2 style="color: #EF4444;">This link has expired</h2>
+            <p style="color: #9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6;">
+              This invitation link is older than 7 days and is no longer valid.
+              Please contact the VJ Startups team if you still wish to connect.
+            </p>
+          </body>
+        </html>
+      `);
     }
 
     if (response === 'yes') {
