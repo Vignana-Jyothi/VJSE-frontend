@@ -317,6 +317,80 @@ Impact: Smoother rate limiting, CN syllabus alignment, admin monitoring capabili
 
 ---
 
+## WebSocket Real-Time Notifications — CN Unit 1, 4, 5 Implementation
+
+### Why WebSocket
+The volunteer dashboard previously used HTTP polling every 60 seconds to check
+for new notifications. Polling wastes bandwidth, introduces up to 60 seconds of
+delay, and does not demonstrate any new CN concept beyond HTTP. WebSocket
+replaces polling with a persistent full-duplex TCP connection — a fundamentally
+different protocol with its own handshake, framing, and connection lifecycle.
+
+### How it works
+```
+1. Client sends HTTP request with Upgrade: websocket header
+2. Server responds with 101 Switching Protocols
+3. TCP connection stays open — no more request-response cycles
+4. Server pushes events instantly when they happen
+5. Client receives events in under 100ms regardless of polling interval
+```
+
+### Room-based architecture
+Connected clients join rooms based on their role on login.
+Server emits events to specific rooms only — volunteers cannot
+receive admin-only events and vice versa.
+
+| Room | Who joins | Events received |
+|---|---|---|
+| volunteer | Volunteers | sourcer-declined, new-lead, lead-approved, intro-requested |
+| admin | Admins | All volunteer events plus admin-only alerts |
+| founder | Founders | intro-status-updated |
+| user-{id} | Specific user | Personal notifications |
+
+### Events emitted
+| Event | Trigger | Recipients |
+|---|---|---|
+| sourcer-declined | Sourcer clicks No in email | volunteer, admin |
+| new-lead | Student submits a lead | volunteer, admin |
+| lead-approved | Volunteer approves lead | volunteer, admin |
+| intro-requested | Founder requests introduction | volunteer, admin |
+
+### CN syllabus mapping
+- Unit 1 — Full-duplex communication: both client and server send messages simultaneously
+- Unit 1 — Multiplexing: multiple logical channels over one TCP connection via rooms
+- Unit 4 — TCP persistent connection: WebSocket maintains one TCP connection indefinitely
+- Unit 4 — Process to process communication: port-based delivery to specific browser tab
+- Unit 5 — Application layer protocol: WebSocket is a distinct protocol above TCP
+- Unit 5 — HTTP upgrade mechanism: connection starts as HTTP then upgrades
+
+### Polling vs WebSocket comparison
+| Property | HTTP Polling | WebSocket |
+|---|---|---|
+| Connection | New TCP connection every 60s | One persistent TCP connection |
+| Latency | Up to 60 seconds | Under 100 milliseconds |
+| Bandwidth | 10 requests/minute per user | Near zero when idle |
+| Server push | Not possible | Native |
+| CN concept demonstrated | HTTP request-response | Full-duplex TCP, upgrade handshake |
+
+### Monitoring
+Admin can view live WebSocket connection counts at
+GET /api/admin/websocket-status showing connected users per room.
+Use this during CN demonstration to show active connections in real time.
+
+### Fallback
+socket.io automatically falls back to HTTP long-polling if WebSocket
+is unavailable in the network environment. Zero breakage risk.
+
+### Decision Log Entry
+Date: August 2026
+Decision: Add WebSocket via socket.io for real-time volunteer notifications
+Alternatives: HTTP polling (existing), Server-Sent Events (SSE)
+Reason: WebSocket demonstrates full-duplex TCP for CN syllabus, solves
+real 60-second notification delay, room-based architecture scales cleanly
+Impact: Instant notifications, eliminated polling, CN Units 1/4/5 coverage
+
+---
+
 ## 11. How to Update This Document
 
 This document is a living artifact. It **must** be updated whenever a major technical decision or architectural shift occurs. 

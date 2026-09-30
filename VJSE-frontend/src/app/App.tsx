@@ -18,6 +18,7 @@ import MentorPage from "./pages/MentorPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import TermsOfServicePage from "./pages/TermsOfServicePage";
+import { useWebSocket } from './hooks/useWebSocket';
 
 type AppUser = {
   id: number;
@@ -387,6 +388,7 @@ const AccountLinkingModal = ({
 
 export default function App() {
   const [user, setUser] = useState<AppUser | null>(null);
+  const { on, isConnected } = useWebSocket(user);
   const [toastMessage, setToastMessage] = useState("");
   const [showRocket, setShowRocket] = useState(false);
   const [showLinkingModal, setShowLinkingModal] = useState(false);

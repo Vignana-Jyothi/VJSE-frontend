@@ -964,6 +964,15 @@ app.post('/api/leads',
       }
 
       console.log("Created new lead in SQLCipher:", result.lead);
+      // Emit real-time notification to volunteers that a new lead needs review
+      emitToVolunteers('new-lead', {
+        type: 'new-lead',
+        leadName: result.lead.name,
+        domain: result.lead.domain,
+        organisation: result.lead.organization,
+        leadId: result.lead.id,
+        message: `New lead submitted: ${result.lead.name} from ${result.lead.organization} (${result.lead.domain})`
+      });
       return res.status(201).json(result.lead);
     }
 
@@ -981,6 +990,15 @@ app.post('/api/leads',
     });
 
     console.log("Created new lead in SQLCipher:", lead);
+    // Emit real-time notification to volunteers that a new lead needs review
+    emitToVolunteers('new-lead', {
+      type: 'new-lead',
+      leadName: lead.name,
+      domain: lead.domain,
+      organisation: lead.organization,
+      leadId: lead.id,
+      message: `New lead submitted: ${lead.name} from ${lead.organization} (${lead.domain})`
+    });
     res.status(201).json(lead);
   } catch (error) {
     console.error("Error creating lead:", error);
@@ -1460,6 +1478,16 @@ app.post('/api/connections',
         }
       });
 
+      // Emit real-time notification to all volunteers and admins
+      emitToVolunteers('intro-requested', {
+        type: 'intro-requested',
+        founderName: founder?.name || 'A Founder',
+        mentorName: lead?.name || 'A Mentor',
+        domain: lead?.domain || '',
+        connectionId: conn.id,
+        message: `${founder?.name || 'A founder'} has requested an introduction to ${lead?.name || 'a mentor'}`
+      });
+
       // Send email to SOURCER first — not mentor
       if (lead?.sourcer?.email) {
         await sendSourcerIntroRequestEmail({
@@ -1796,6 +1824,14 @@ app.patch('/api/leads/:id/approve', requireRole('Admin', 'Volunteer'), async (re
     });
 
     console.log(`Lead ID ${id} approved by volunteer`);
+    // Emit real-time notification — lead now available for founders to discover
+    emitToVolunteers('lead-approved', {
+      type: 'lead-approved',
+      leadId: id,
+      leadName: updated.name,
+      domain: updated.domain,
+      message: `Lead ${updated.name} has been approved and is now visible to founders`
+    });
     res.json(updated);
   } catch (error) {
     console.error("Error approving lead:", error);
@@ -2240,6 +2276,20 @@ app.get('/api/invite/sourcer-respond', async (req, res) => {
         }
       });
 
+      // Emit real-time alert to volunteers about sourcer decline
+      emitToVolunteers('sourcer-declined', {
+        type: 'sourcer-declined',
+        sourcerName: connection.lead?.sourcer?.name || 'Unknown',
+        sourcerEmail: connection.lead?.sourcer?.email || '',
+        sourcerPhone: connection.lead?.sourcer?.phone || 'Not provided',
+        sourcerYear: connection.lead?.sourcer?.year || '',
+        sourcerBranch: connection.lead?.sourcer?.branch || '',
+        mentorName: connection.lead?.name || 'Unknown',
+        founderName: connection.user?.name || 'Unknown',
+        connectionId: parseInt(connectionId),
+        message: `Sourcer ${connection.lead?.sourcer?.name || 'Unknown'} declined to introduce ${connection.lead?.name || 'mentor'}`
+      });
+
       // Store notification for volunteer dashboard
       console.log(`SOURCER_DECLINED: connectionId=${connectionId} sourcer=${connection.lead.sourcer?.name} email=${connection.lead.sourcer?.email} phone=${connection.lead.sourcer?.phone} year=${connection.lead.sourcer?.year} branch=${connection.lead.sourcer?.branch}`);
 
@@ -2376,16 +2426,122 @@ app.get('/api/unsubscribe', async (req, res) => {
   }
 });
 
+// --- WEBSOCKET STATUS ROUTE ---
+app.get('/api/admin/websocket-status', requireRole('Admin'), (req, res) => {
+  const rooms = io.sockets.adapter.rooms;
+  const volunteerCount = rooms.get('volunteer')?.size || 0;
+  const adminCount = rooms.get('admin')?.size || 0;
+  const founderCount = rooms.get('founder')?.size || 0;
+  const studentCount = rooms.get('student')?.size || 0;
+  const mentorCount = rooms.get('mentor')?.size || 0;
+  res.json({
+    totalConnected: io.sockets.sockets.size,
+    rooms: {
+      volunteer: volunteerCount,
+      admin: adminCount,
+      founder: founderCount,
+      student: studentCount,
+      mentor: mentorCount
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // --- GLOBAL ERROR HANDLER (must be after all routes) ---
 app.use((err, req, res, next) => {
   console.error(`[ERROR] ${req.method} ${req.path}:`, err);
   res.status(500).json({ error: 'An internal error occurred' });
 });
 
+// --- WEBSOCKET SERVER SETUP ---
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+
+const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  // Falls back to polling if WebSocket unavailable
+  transports: ['websocket', 'polling']
+});
+
+// ============================================================
+// WEBSOCKET CONNECTION HANDLER — CN Unit 1: Full-Duplex TCP
+// ============================================================
+// Each connected client joins a room based on their role.
+// Server pushes events to specific rooms only.
+// This demonstrates: persistent TCP connection, server push,
+// full-duplex communication, WebSocket upgrade handshake.
+// ============================================================
+
+io.on('connection', (socket) => {
+  console.log(`[WebSocket] Client connected: ${socket.id}`);
+
+  // Client sends their role after connecting
+  // They join a room matching their role
+  socket.on('join-room', (data) => {
+    const { role, userId } = data;
+    if (role && userId) {
+      socket.join(role.toLowerCase());
+      socket.join(`user-${userId}`);
+      console.log(`[WebSocket] User ${userId} joined room: ${role.toLowerCase()}`);
+      // Confirm connection to client
+      socket.emit('connected', {
+        message: 'Real-time connection established',
+        socketId: socket.id,
+        room: role.toLowerCase(),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`[WebSocket] Client disconnected: ${socket.id} reason: ${reason}`);
+  });
+
+  socket.on('error', (error) => {
+    console.error(`[WebSocket] Socket error: ${socket.id}`, error);
+  });
+});
+
+// ============================================================
+// WEBSOCKET EVENT EMITTER HELPERS
+// Called from API routes when key events happen
+// ============================================================
+
+function emitToVolunteers(event, data) {
+  io.to('volunteer').to('admin').emit(event, {
+    ...data,
+    timestamp: new Date().toISOString()
+  });
+  console.log(`[WebSocket] Emitted ${event} to volunteer and admin rooms`);
+}
+
+function emitToUser(userId, event, data) {
+  io.to(`user-${userId}`).emit(event, {
+    ...data,
+    timestamp: new Date().toISOString()
+  });
+  console.log(`[WebSocket] Emitted ${event} to user-${userId}`);
+}
+
+function emitToAdmins(event, data) {
+  io.to('admin').emit(event, {
+    ...data,
+    timestamp: new Date().toISOString()
+  });
+  console.log(`[WebSocket] Emitted ${event} to admin room`);
+}
+
 // --- GRACEFUL SHUTDOWN ---
-const server = app.listen(PORT, () => {
-  console.log(`Express API server running on http://localhost:${PORT}`);
-  console.log(`Database: SQLCipher-encrypted SQLite (dev.db)`);
+const server = httpServer.listen(PORT, () => {
+  console.log(`🚀 Express + WebSocket server running on http://localhost:${PORT}`);
+  console.log(`📂 Connected to SQLCipher-encrypted SQLite DB (dev.db)`);
+  console.log(`🔌 WebSocket server ready on ws://localhost:${PORT}`);
 });
 
 const shutdownSignals = ['SIGTERM', 'SIGINT'];

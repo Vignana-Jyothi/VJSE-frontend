@@ -21,6 +21,7 @@ import {
 import { UserRole } from "../data/network";
 import { LoginGate } from "../components/LoginGate";
 import { api } from "../data/api";
+import { useWebSocket } from '../hooks/useWebSocket';
 
 interface VolunteerPageProps {
   user: { id: number; fullName: string; email: string; role: UserRole } | null;
@@ -50,6 +51,8 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
     return <LoginGate onLogin={onLogin} />;
   }
 
+  const { on } = useWebSocket(user);
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"Pending" | "Approved" | "Rejected">("Pending");
@@ -69,15 +72,39 @@ export function VolunteerPage({ user, onLogin }: VolunteerPageProps) {
   const [loadingConnections, setLoadingConnections] = useState(false);
 
   useEffect(() => {
-    fetchLeads();
+    if (!user) return;
+
+    // Initial fetch to load existing notifications on page load
     fetchNotifications();
+    fetchLeads();
 
-    const intervalId = setInterval(() => {
-      fetchNotifications();
-    }, 60000); // 60 seconds
+    // Real-time WebSocket listeners — replace polling
+    const offSourcerDeclined = on('sourcer-declined', (data) => {
+      console.log('[WebSocket] Sourcer declined event received:', data);
+      setDeclinedNotifications(prev => [data, ...prev]);
+      toast(`Sourcer ${data.sourcerName} declined to introduce ${data.mentorName}`, {
+        duration: 8000
+      });
+    });
 
-    return () => clearInterval(intervalId);
-  }, []);
+    const offNewLead = on('new-lead', (data) => {
+      console.log('[WebSocket] New lead event received:', data);
+      fetchLeads(); // Refresh lead list
+      toast(`New lead submitted: ${data.leadName} from ${data.organisation}`);
+    });
+
+    const offLeadApproved = on('lead-approved', (data) => {
+      console.log('[WebSocket] Lead approved event received:', data);
+      fetchLeads(); // Refresh lead list
+    });
+
+    // Cleanup listeners on unmount
+    return () => {
+      offSourcerDeclined();
+      offNewLead();
+      offLeadApproved();
+    };
+  }, [user, on]);
 
   async function fetchLeads() {
     setLoading(true);
