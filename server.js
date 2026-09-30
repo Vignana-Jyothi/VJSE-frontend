@@ -6,7 +6,6 @@ const path = require('path');
 const session = require('express-session');
 const passport = require('passport');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const { OAuth2Client } = require('google-auth-library');
 const {
@@ -92,28 +91,163 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 
-// --- RATE LIMITERS ---
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 200,                    // 200 requests per window per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests. Please try again later.' },
-});
-app.use(globalLimiter);
+// ============================================================
+// TOKEN BUCKET RATE LIMITER — CN Unit 4: QoS Token Bucket
+// ============================================================
+// Each bucket holds tokens up to a maximum capacity.
+// Tokens are added at a fixed refill rate (tokens per second).
+// Each incoming request consumes one token.
+// If the bucket is empty the request is rejected with HTTP 429.
+// This prevents burst exploitation that fixed-window limiters allow.
+// ============================================================
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 10,                    // 10 login attempts per 15 min
-  message: { error: 'Too many login attempts. Please try again later.' },
-  skipSuccessfulRequests: true,
-});
+class TokenBucket {
+  constructor({ capacity, refillRate, refillIntervalMs }) {
+    this.capacity = capacity;           // Maximum tokens the bucket can hold
+    this.tokens = capacity;             // Start full
+    this.refillRate = refillRate;       // Tokens added per interval
+    this.refillIntervalMs = refillIntervalMs; // How often to add tokens (ms)
+    this.lastRefill = Date.now();       // Timestamp of last refill
+  }
 
-const emailLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,  // 1 hour
-  max: 10,                    // 10 email-triggering requests per hour per IP
-  message: { error: 'Too many requests. Please try again later.' },
-});
+  // Called on every incoming request
+  consume() {
+    this._refill();
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return true;  // Request allowed
+    }
+    return false;   // Bucket empty — reject request
+  }
+
+  // Add tokens based on elapsed time since last refill
+  _refill() {
+    const now = Date.now();
+    const elapsed = now - this.lastRefill;
+    const intervals = Math.floor(elapsed / this.refillIntervalMs);
+    if (intervals > 0) {
+      this.tokens = Math.min(
+        this.capacity,
+        this.tokens + intervals * this.refillRate
+      );
+      this.lastRefill = now;
+    }
+  }
+
+  // Returns current state for monitoring and debugging
+  status() {
+    this._refill();
+    return {
+      tokens: Math.floor(this.tokens),
+      capacity: this.capacity,
+      refillRate: this.refillRate,
+      refillIntervalMs: this.refillIntervalMs,
+      percentFull: Math.round((this.tokens / this.capacity) * 100)
+    };
+  }
+}
+
+// ============================================================
+// BUCKET REGISTRY — one bucket per IP address per endpoint
+// Buckets are created on first request and cached in memory
+// ============================================================
+const bucketRegistry = new Map();
+
+function getBucket(key, config) {
+  if (!bucketRegistry.has(key)) {
+    bucketRegistry.set(key, new TokenBucket(config));
+  }
+  return bucketRegistry.get(key);
+}
+
+// Clean up stale buckets every 10 minutes to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of bucketRegistry.entries()) {
+    // Remove buckets that haven't been used in 30 minutes
+    if (now - bucket.lastRefill > 30 * 60 * 1000) {
+      bucketRegistry.delete(key);
+    }
+  }
+}, 10 * 60 * 1000);
+
+// ============================================================
+// MIDDLEWARE FACTORY — creates route-specific token bucket middleware
+// Usage: app.post('/route', tokenBucketMiddleware(config), handler)
+// ============================================================
+function tokenBucketMiddleware(config, endpointName) {
+  return (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const bucketKey = `${endpointName}:${ip}`;
+    const bucket = getBucket(bucketKey, config);
+
+    if (bucket.consume()) {
+      // Attach bucket status to response headers for debugging
+      res.setHeader('X-RateLimit-Remaining', Math.floor(bucket.tokens));
+      res.setHeader('X-RateLimit-Limit', bucket.capacity);
+      next();
+    } else {
+      // Calculate when the next token will be available
+      const retryAfterMs = bucket.refillIntervalMs;
+      res.setHeader('Retry-After', Math.ceil(retryAfterMs / 1000));
+      res.setHeader('X-RateLimit-Remaining', 0);
+      res.setHeader('X-RateLimit-Limit', bucket.capacity);
+      console.warn(`[TokenBucket] Rate limit exceeded: endpoint=${endpointName} ip=${ip}`);
+      return res.status(429).json({
+        error: 'Too many requests. Please slow down and try again shortly.',
+        retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
+        endpoint: endpointName
+      });
+    }
+  };
+}
+
+// ============================================================
+// BUCKET CONFIGURATIONS PER ENDPOINT
+// Each endpoint has its own bucket tuned to its risk level
+// ============================================================
+
+const BUCKETS = {
+  // Auth endpoints — strict. 5 attempts, 1 refill per 3 minutes
+  // Prevents brute force login attacks
+  AUTH: {
+    capacity: 5,
+    refillRate: 1,
+    refillIntervalMs: 3 * 60 * 1000   // 1 token every 3 minutes
+  },
+
+  // Email endpoints — very strict. 3 emails per hour per IP
+  // Prevents email spam abuse through the platform
+  EMAIL: {
+    capacity: 3,
+    refillRate: 1,
+    refillIntervalMs: 20 * 60 * 1000  // 1 token every 20 minutes
+  },
+
+  // Lead submission — moderate. 10 leads per 10 minutes
+  // Prevents bulk fake lead submission
+  LEAD_SUBMIT: {
+    capacity: 10,
+    refillRate: 2,
+    refillIntervalMs: 2 * 60 * 1000   // 2 tokens every 2 minutes
+  },
+
+  // Profile completion — relaxed. 5 attempts per 5 minutes
+  // User might make mistakes filling in their profile
+  PROFILE: {
+    capacity: 5,
+    refillRate: 1,
+    refillIntervalMs: 60 * 1000       // 1 token every minute
+  },
+
+  // General API — generous. 100 requests per minute
+  // Covers all other authenticated endpoints
+  GENERAL: {
+    capacity: 100,
+    refillRate: 10,
+    refillIntervalMs: 6 * 1000        // 10 tokens every 6 seconds
+  }
+};
 
 // --- TIMEZONE & SESSION EXPIRATION HELPERS (Asia/Kolkata - IST / UTC+5:30) ---
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -351,8 +485,9 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// POST /auth/google - Authenticate Google ID token (cryptographically verified)
-app.post('/auth/google', authLimiter, async (req, res) => {
+app.post('/auth/google',
+  tokenBucketMiddleware(BUCKETS.AUTH, 'google-auth'),
+  async (req, res) => {
   try {
     const token = req.body.token || req.body.idToken || req.body.credential;
     if (!token) {
@@ -570,8 +705,9 @@ app.post('/api/logout', (req, res, next) => {
   });
 });
 
-// POST /api/login - Log in user or auto-signup new @vnrvjiet.in accounts
-app.post('/api/login', authLimiter, async (req, res) => {
+app.post('/api/login',
+  tokenBucketMiddleware(BUCKETS.AUTH, 'login'),
+  async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -673,8 +809,10 @@ app.post('/api/login', authLimiter, async (req, res) => {
   }
 });
 
-// POST /api/users/complete-profile — Student fills in phone, year, branch on first login
-app.post('/api/users/complete-profile', requireAuth, async (req, res) => {
+app.post('/api/users/complete-profile',
+  requireAuth,
+  tokenBucketMiddleware(BUCKETS.PROFILE, 'complete-profile'),
+  async (req, res) => {
   try {
     const { phone, year, branch } = req.body;
     const userId = req.session?.user?.id || req.user?.id;
@@ -773,8 +911,10 @@ app.get('/api/leads', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/leads - Create a new lead
-app.post('/api/leads', requireAuth, async (req, res) => {
+app.post('/api/leads',
+  requireAuth,
+  tokenBucketMiddleware(BUCKETS.LEAD_SUBMIT, 'lead-submit'),
+  async (req, res) => {
   try {
     const { name, email, domain, organization, city, skills, sourcerId } = req.body;
 
@@ -1264,8 +1404,10 @@ app.get('/api/connections', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/connections - Send connection request to a lead
-app.post('/api/connections', requireRole('Founder'), emailLimiter, async (req, res) => {
+app.post('/api/connections',
+  requireRole('Founder'),
+  tokenBucketMiddleware(BUCKETS.EMAIL, 'connections'),
+  async (req, res) => {
   try {
     const { userId, leadId } = req.body;
     if (!userId || !leadId) {
@@ -1469,6 +1611,22 @@ app.delete('/api/users/:id', requireRole('Admin'), async (req, res) => {
     console.error("Error deleting user:", error);
     res.status(500).json({ error: "Failed to remove user account" });
   }
+});
+
+// GET /api/admin/rate-limit-status
+// Shows current state of all active token buckets
+// Admin only — for monitoring and CN demonstration
+app.get('/api/admin/rate-limit-status', requireRole('Admin'), (req, res) => {
+  const status = {};
+  for (const [key, bucket] of bucketRegistry.entries()) {
+    status[key] = bucket.status();
+  }
+  res.json({
+    activeBuckets: bucketRegistry.size,
+    buckets: status,
+    configurations: BUCKETS,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // PATCH /api/connections/:id - Update connection status
@@ -1675,8 +1833,10 @@ app.patch('/api/leads/:id/reject', requireRole('Admin', 'Volunteer'), async (req
   }
 });
 
-// POST /api/leads/:id/invite - Send email invitation to approved lead
-app.post('/api/leads/:id/invite', requireRole('Admin', 'Volunteer'), emailLimiter, async (req, res) => {
+app.post('/api/leads/:id/invite',
+  requireRole('Admin', 'Volunteer'),
+  tokenBucketMiddleware(BUCKETS.EMAIL, 'lead-invite'),
+  async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {

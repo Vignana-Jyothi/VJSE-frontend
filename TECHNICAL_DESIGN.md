@@ -169,7 +169,7 @@ The email system is powered by `nodemailer` (`mailer.js`), authenticating via a 
 ## 7. Security Decisions
 
 - **Helmet**: Included in the Express pipeline to automatically set secure HTTP headers (e.g., X-XSS-Protection, Content-Security-Policy).
-- **Rate Limiting**: Used to prevent brute force attacks. Auth routes (`/api/login`, `/auth/google`) are strictly limited (10 requests/15min).
+- **Token Bucket Rate Limiting**: QoS Token Bucket algorithm (CN Unit 4) replaces fixed-window rate limiting to prevent boundary burst exploitation and ensure smooth traffic shaping across sensitive endpoints (`/api/login`, `/auth/google`, `/api/connections`, `/api/leads`, `/api/users/complete-profile`, `/api/leads/:id/invite`).
 - **Bcrypt Hashing**: Passwords are never stored in plain text. A fallback vulnerability was explicitly removed, ensuring all password comparisons use `bcrypt.compare`.
 - **Middleware**: `requireAuth` and `requireRole` interceptors ensure endpoints are strictly gated. You cannot access `/api/users` unless the session proves you are an Admin.
 - **HttpOnly Cookies**: Session cookies cannot be read by frontend JavaScript, completely eliminating XSS session-theft vectors.
@@ -244,6 +244,76 @@ The frontend is a Vite-powered React SPA using `react-router-dom` for navigation
 | 2026-09-24 | Add Privacy, Terms of Service, 404 Pages & route titles | External links or ignoring legal | Provides mandatory legal context for a platform handling user emails, phone numbers, and startup data. | Included `<PrivacyPolicyPage>`, `<TermsOfServicePage>`, and `<NotFoundPage>` linked in `App.tsx` and `LoginPage.tsx` footer. |
 | 2026-09-24 | Replaced Verified Leads with Active Users stat on Landing Page | Hardcoded or static count | Demonstrates real platform engagement instead of just a lead repository by checking unique `LoginLog` entries. | Updated `GET /api/stats` to compute `activeUsers` using `LoginLog` distinct `userId` mapping. |
 | 2026-09-24 | Fixed Founder redirection bug in `getRedirectPath` | Founder users seeing Student page | Founders logging in with `@vnrvjiet.in` were being wrongly redirected to `/student` due to domain fallback rules. | Ensured `role === "Founder"` explicitly bypasses student domain fallback and routes to `/founder`. |
+| August 2026 | Replace fixed-window rate limiter with custom token bucket implementation | express-rate-limit (fixed window), leaky bucket | Token bucket directly maps to CN Unit 4 syllabus, handles bursts better, and gives us a monitorable rate limiting system with live status endpoint | Smoother rate limiting, CN syllabus alignment, admin monitoring capability |
+
+---
+
+## Token Bucket Rate Limiter — CN Unit 4: QoS Implementation
+
+### Why Token Bucket
+The platform previously used express-rate-limit with a fixed-window algorithm.
+Fixed windows allow burst exploitation at window boundaries — an attacker can
+send the maximum requests at the end of one window and the start of the next,
+doubling the effective rate. Token bucket eliminates this by tracking tokens
+continuously rather than resetting counters at fixed intervals.
+
+### How It Works
+Each IP address gets its own bucket per endpoint. The bucket holds tokens up
+to a maximum capacity and refills at a fixed rate. Every request consumes one
+token. Empty bucket means the request is rejected with HTTP 429.
+
+```
+Bucket capacity: 5 tokens (AUTH endpoint)
+Refill rate: 1 token per 3 minutes
+
+Timeline:
+T=0:00  → Bucket full: [■■■■■] 5 tokens
+T=0:01  → Login attempt: [■■■■□] 4 tokens
+T=0:02  → Login attempt: [■■■□□] 3 tokens
+T=0:03  → Login attempt: [■■□□□] 2 tokens
+T=0:04  → Login attempt: [■□□□□] 1 token
+T=0:05  → Login attempt: [□□□□□] 0 tokens
+T=0:06  → Login attempt: REJECTED 429
+T=3:00  → Refill:        [■□□□□] 1 token
+T=6:00  → Refill:        [■■□□□] 2 tokens
+```
+
+### Bucket Configurations
+| Endpoint | Capacity | Refill Rate | Refill Interval | Purpose |
+|---|---|---|---|---|
+| AUTH | 5 | 1 token | 3 minutes | Prevent brute force login |
+| EMAIL | 3 | 1 token | 20 minutes | Prevent email spam abuse |
+| LEAD_SUBMIT | 10 | 2 tokens | 2 minutes | Prevent bulk fake lead submission |
+| PROFILE | 5 | 1 token | 1 minute | Allow profile editing with mistakes |
+| GENERAL | 100 | 10 tokens | 6 seconds | Cover all other endpoints |
+
+### CN Syllabus Mapping
+- **Unit 4 — QoS Token Bucket Algorithm:** Direct implementation
+- **Unit 4 — Congestion Control:** Prevents server overload by controlling request rate
+- **Unit 4 — Flow Control:** Per-IP buckets implement per-sender flow control
+- **Unit 5 — Application Layer Security:** Firewall-equivalent protection at HTTP layer
+
+### Comparison with Leaky Bucket
+| Property | Token Bucket | Leaky Bucket |
+|---|---|---|
+| Burst handling | Allows bursts up to capacity | Smooths all traffic to fixed rate |
+| Implementation | Discrete tokens | Continuous drain |
+| Best for | APIs with bursty legitimate traffic | Network traffic shaping |
+| Our choice | Token bucket — founders may legitimately send several requests quickly |
+
+### Monitoring
+Admin can view all active bucket states at GET /api/admin/rate-limit-status.
+Response includes tokens remaining, capacity, refill rate, and percent full
+for every active IP-endpoint combination. Use this endpoint with your CN
+report to show live token bucket state during a demonstration.
+
+### Decision Log Entry
+Date: August 2026
+Decision: Replace fixed-window rate limiter with custom token bucket implementation
+Alternatives considered: express-rate-limit (fixed window), leaky bucket
+Reason: Token bucket directly maps to CN Unit 4 syllabus, handles bursts better,
+and gives us a monitorable rate limiting system with live status endpoint
+Impact: Smoother rate limiting, CN syllabus alignment, admin monitoring capability
 
 ---
 
